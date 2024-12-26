@@ -242,42 +242,35 @@ app.get('/api/chart-data', (req, res) => {
   try {
     const { range = '7d' } = req.query;
 
-    let timeFilter = Date.now();
-    let maxDataPoints;
-
+    // Calculate the time filter for the selected range
+    let timeFilter;
     switch (range) {
       case '1h':
-        timeFilter -= 60 * 60 * 1000;
-        maxDataPoints = 3600 / 3; // Assuming 3-second intervals
+        timeFilter = Date.now() - 60 * 60 * 1000; // 1 hour
         break;
       case '1d':
-        timeFilter -= 24 * 60 * 60 * 1000;
-        maxDataPoints = 24 * 3600 / 3;
+        timeFilter = Date.now() - 24 * 60 * 60 * 1000; // 1 day
         break;
       case '7d':
-        timeFilter -= 7 * 24 * 60 * 60 * 1000;
-        maxDataPoints = 7 * 24 * 3600 / 3;
+        timeFilter = Date.now() - 7 * 24 * 60 * 60 * 1000; // 7 days
         break;
       case '30d':
-        timeFilter -= 30 * 24 * 60 * 60 * 1000;
-        maxDataPoints = 30 * 24 * 3600 / 3;
+        timeFilter = Date.now() - 30 * 24 * 60 * 60 * 1000; // 30 days
         break;
       default:
-        timeFilter -= 7 * 24 * 60 * 60 * 1000;
-        maxDataPoints = 7 * 24 * 3600 / 3;
+        timeFilter = Date.now() - 7 * 24 * 60 * 60 * 1000; // Default to 7 days
     }
 
+    // Query rows strictly within the selected range
     const rows = db
       .prepare(`
         SELECT *
         FROM gas_prices
         WHERE timestamp >= ?
         ORDER BY blockNumber ASC
-        LIMIT ?
       `)
-      .all(new Date(timeFilter).toISOString(), maxDataPoints);
+      .all(new Date(timeFilter).toISOString());
 
-    // Map data into required structures
     const seiData = rows.map((r) => ({
       blockNumber: r.blockNumber,
       timestamp: r.timestamp,
@@ -292,8 +285,8 @@ app.get('/api/chart-data', (req, res) => {
 
     res.json({ seiData, evmData });
   } catch (error) {
-    console.error('Error fetching chart data:', error.message);
-    res.status(500).json({ seiData: [], evmData: [] }); // Return empty arrays on error
+    console.error("Error fetching chart data:", error.message);
+    res.status(500).json({ seiData: [], evmData: [] }); // Default to empty arrays on error
   }
 });
 

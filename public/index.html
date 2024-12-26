@@ -17,19 +17,19 @@
       align-items: center;
       padding: 20px;
     }
-
+  
     canvas {
       background-color: #2d2d2d;
       border: 1px solid #444;
       margin-bottom: 20px;
     }
-
+  
     .controls {
       display: flex;
       gap: 10px;
       margin-bottom: 20px;
     }
-
+  
     .controls button {
       background-color: #444;
       color: #d4d4d4;
@@ -39,20 +39,43 @@
       border-radius: 4px;
       transition: background-color 0.3s;
     }
-
+  
     .controls button:hover {
       background-color: #555;
     }
-
+  
     .controls button.active {
       background-color: #007acc;
       color: white;
     }
-
+  
     .toggle-controls {
       display: flex;
       gap: 10px;
       margin-bottom: 20px;
+    }
+  
+    /* Updated toggle button styles */
+    .toggle-controls button {
+      background-color: #007acc;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+      transition: background-color 0.3s, transform 0.3s;
+    }
+  
+    .toggle-controls button:hover {
+      background-color: #005ea8;
+      transform: scale(1.05);
+    }
+  
+    .toggle-controls button.active {
+      background-color: #003f6b;
+      color: #d4d4d4;
     }
   </style>
 </head>
@@ -216,13 +239,17 @@
     togglePredictedButton.addEventListener("click", () => {
       const predictedDataset = chart.data.datasets[0];
       predictedDataset.hidden = !predictedDataset.hidden;
+      togglePredictedButton.classList.toggle("active", !predictedDataset.hidden);
       chart.update();
     });
+
     toggleActualButton.addEventListener("click", () => {
       const actualDataset = chart.data.datasets[1];
       actualDataset.hidden = !actualDataset.hidden;
+      toggleActualButton.classList.toggle("active", !actualDataset.hidden);
       chart.update();
     });
+
 
 // Data fetch
 const fetchData = async () => {
@@ -236,37 +263,47 @@ const fetchData = async () => {
     const seiDataArray = Array.isArray(seiData) ? seiData : [];
     const evmDataArray = Array.isArray(evmData) ? evmData : [];
 
-    // Determine max data points based on range
-    const maxDataPoints = {
-      "1h": 3600 / 3, // Assuming 3-second intervals
-      "1d": 24 * 3600 / 3,
-      "7d": 7 * 24 * 3600 / 3,
-      "30d": 30 * 24 * 3600 / 3,
-    }[currentRange];
+    // Calculate the time filter for the current range
+    const nowUTC = Date.now();
+    let timeFilter;
+    switch (currentRange) {
+      case "1h":
+        timeFilter = nowUTC - 60 * 60 * 1000; // 1 hour
+        break;
+      case "1d":
+        timeFilter = nowUTC - 24 * 60 * 60 * 1000; // 1 day
+        break;
+      case "7d":
+        timeFilter = nowUTC - 7 * 24 * 60 * 60 * 1000; // 7 days
+        break;
+      case "30d":
+        timeFilter = nowUTC - 30 * 24 * 60 * 60 * 1000; // 30 days
+        break;
+      default:
+        timeFilter = nowUTC - 7 * 24 * 60 * 60 * 1000; // Default to 7 days
+    }
 
-    // Add new data and remove old data for smooth updates
-    seiDataArray.forEach((d) => {
-      const label = `Block: ${d.blockNumber}\n${new Date(d.timestamp).toLocaleTimeString()}`;
-      const dataPoint = d.confidence99 || 0;
+    // Filter the data to include only points from the selected range
+    const filteredSeiData = seiDataArray.filter(
+      (d) => new Date(d.timestamp).getTime() >= timeFilter
+    );
+    const filteredEvmData = evmDataArray.filter(
+      (d) => new Date(d.timestamp).getTime() >= timeFilter
+    );
 
-      if (chart.data.labels.length >= maxDataPoints) {
-        chart.data.labels.shift(); // Remove oldest label
-        chart.data.datasets[0].data.shift(); // Remove oldest predicted gas price
-      }
-      chart.data.labels.push(label); // Add new label
-      chart.data.datasets[0].data.push(dataPoint); // Add new data point
-    });
+    // Map filtered data to labels and datasets
+    const newLabels = filteredSeiData.map(
+      (d) => `Block: ${d.blockNumber}\n${new Date(d.timestamp).toLocaleTimeString()}`
+    );
+    const newPredictedGasPrices = filteredSeiData.map((d) => d.confidence99 || 0);
+    const newActualGasPrices = filteredEvmData.map((d) => d.confidence99 || 0);
 
-    evmDataArray.forEach((d) => {
-      const dataPoint = d.confidence99 || 0;
+    // Update the chart
+    chart.data.labels = newLabels;
+    chart.data.datasets[0].data = newPredictedGasPrices;
+    chart.data.datasets[1].data = newActualGasPrices;
 
-      if (chart.data.datasets[1].data.length >= maxDataPoints) {
-        chart.data.datasets[1].data.shift(); // Remove oldest actual gas price
-      }
-      chart.data.datasets[1].data.push(dataPoint); // Add new data point
-    });
-
-    chart.update(); // Update the chart without full rebuild
+    chart.update();
   } catch (error) {
     console.error("Error fetching chart data:", error);
   }
