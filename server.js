@@ -3,7 +3,7 @@ import express from 'express';
 import Database from 'better-sqlite3';
 
 const app = express();
-const PORT = 3000;
+const PORT = 3003;
 
 // Initialize SQLite database
 const db = new Database('gas_prices.db');
