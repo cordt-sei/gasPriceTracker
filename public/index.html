@@ -106,7 +106,6 @@
       pauseUpdatesButton.textContent = isPaused ? "Resume Updates" : "Pause Updates";
     });
 
-    // Initialize the Chart.js chart
     const ctx = document.getElementById("gasPriceChart").getContext("2d");
     const chart = new Chart(ctx, {
       type: "line",
@@ -120,6 +119,7 @@
             borderWidth: 2,
             pointRadius: 4,
             fill: false,
+            yAxisID: "yLog",        // <-- Logarithmic axis for the green line
           },
           {
             label: "Actual Gas Price",
@@ -129,6 +129,7 @@
             borderWidth: 2,
             pointRadius: 4,
             fill: false,
+            yAxisID: "yLinear",     // <-- Linear axis for the pink line
           },
         ],
       },
@@ -154,28 +155,50 @@
             title: { display: true, text: "Block Details (Height & Time)", color: "#d4d4d4" },
             ticks: { color: "#d4d4d4" },
           },
-          y: {
-            title: { display: true, text: "Gas Price (Gwei)", color: "#d4d4d4" },
+          // Normal linear scale for the pink line
+          yLinear: {
+            type: "linear",
+            display: true,
+            position: "left",
+            title: {
+              display: true,
+              text: "Gas Price (Gwei) - Linear",
+              color: "#d4d4d4",
+            },
             ticks: { color: "#d4d4d4" },
-            beginAtZero: true,
+          },
+          // Logarithmic scale for the green line
+          yLog: {
+            type: "logarithmic",
+            display: true,
+            position: "right",
+            title: {
+              display: true,
+              text: "Gas Price (Gwei) - Log",
+              color: "#d4d4d4",
+            },
+            // Optional if you want to set minimum/maximum
+            // min: 0.1,
+            // max: 100,
+            ticks: {
+              color: "#d4d4d4",
+              // Chart.js will skip 0 on a log scale. You can add custom callback if desired.
+              callback: function (value, index) {
+                return Number(value).toLocaleString();
+              },
+            },
           },
         },
       },
     });
 
-    // Function to fetch data from the server
     const fetchData = async () => {
       if (isPaused) return;
-
       try {
-        // Calls our corrected /api/chart-data route
         const response = await fetch(`/api/chart-data?range=${currentRange}`);
         const { seiData, evmData } = await response.json();
 
-        // seiData and evmData are arrays sorted oldest->newest by blockNumber
-        // So the final element is the most recent data point (appears on the far right)
-
-        // Build arrays for Chart.js
+        // Update chart data
         const labels = seiData.map(
           (d) => `Block: ${d.blockNumber}\n${new Date(d.timestamp).toLocaleTimeString()}`
         );
@@ -183,18 +206,17 @@
         const actualGasPrices = evmData.map((d) => d.confidence99 || 0);
 
         chart.data.labels = labels;
-        chart.data.datasets[0].data = predictedGasPrices;
-        chart.data.datasets[1].data = actualGasPrices;
+        chart.data.datasets[0].data = predictedGasPrices; // green line, log scale
+        chart.data.datasets[1].data = actualGasPrices;    // pink line, linear scale
         chart.update();
       } catch (error) {
         console.error("Error fetching chart data:", error);
       }
     };
 
-    // Fetch new data every 3 seconds
-    setInterval(fetchData, 3000);
+    setInterval(fetchData, 3000); // Fetch data every 3 seconds
 
-    // Initial load
+    // Initial data load
     fetchData();
   </script>
 </body>

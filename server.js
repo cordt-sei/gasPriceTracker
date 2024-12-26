@@ -22,12 +22,10 @@ db.exec(`
   );
 `);
 
-// Keep the in-memory caches and cacheTTL (unchanged)
 let seiDataCache = [];
 let evmDataCache = [];
-let cacheTTL = Date.now(); // For stale-cache warnings
+let cacheTTL = Date.now();
 
-// Track the most recent Sei blockNumber so EVM data updates the correct row
 let currentSeiBlockNumber = null;
 
 // Helper to purge rows older than 30 days
@@ -39,7 +37,6 @@ function purgeOldData() {
   `).run(thirtyDaysAgo);
 }
 
-// Poll: fetch predicted gas price + block/time from Sei
 const pollSeiGasPrices = async () => {
   try {
     const [gasResponse, rpcResponse] = await Promise.all([
@@ -57,7 +54,7 @@ const pollSeiGasPrices = async () => {
 
     const blockNumber = parseInt(syncInfo.latest_block_height, 10);
     const timestamp = syncInfo.latest_block_time;
-    currentSeiBlockNumber = blockNumber; // Store for EVM updates
+    currentSeiBlockNumber = blockNumber;
 
     const blockPrices = gasResponse.data?.blockPrices || [];
     if (!blockPrices.length) {
@@ -73,7 +70,8 @@ const pollSeiGasPrices = async () => {
       return acc;
     }, {});
 
-    // Insert predicted row (if not present)
+    // Insert predicted row (if not present):
+    // 8 columns -> 7 placeholders + 1 literal NULL => 8 total.
     db.prepare(`
       INSERT OR IGNORE INTO gas_prices (
         blockNumber,
@@ -96,7 +94,7 @@ const pollSeiGasPrices = async () => {
       confidences.confidence99 || null
     );
 
-    // Update in-memory "latest" cache (unchanged)
+    // Update in-memory "latest" cache
     seiDataCache = [
       {
         blockNumber,
@@ -113,10 +111,10 @@ const pollSeiGasPrices = async () => {
   }
 };
 
-// Poll: fetch EVM block number + gas price concurrently, then update only if block matches
+// fetch EVM block number + gas price, use Tendermint for block timestamp
 const pollEvmGasPrices = async () => {
   try {
-    // Fetch both blockNumber & gasPrice together
+    // get block number & gas price concurrently
     const [blockNumberResp, gasPriceResp] = await Promise.all([
       axios.post(
         'https://evm-rpc.sei.basementnodes.ca',
@@ -149,36 +147,49 @@ const pollEvmGasPrices = async () => {
     const gasPriceWei = parseInt(gasPriceHex, 16);
     const gasPriceGwei = gasPriceWei / 1e9;
 
-    // Ensure block numbers match
-    if (currentSeiBlockNumber === null) {
-      console.warn('No currentSeiBlockNumber yet, skipping EVM update.');
-      return;
+    const tmBlockResp = await axios.get(
+      `https://rpc.sei.basementnodes.ca/block?height=${evmBlockDec}`
+    );
+    const tmBlockHeader = tmBlockResp.data?.block?.header;
+    let blockTime = tmBlockHeader?.time; // e.g. "2024-12-26T18:13:29.130124875Z"
+
+    if (!blockTime) {
+      // Fallback to "now" if the block isn't found, or handle differently
+      console.warn(`No Tendermint block time found for block #${evmBlockDec}`);
+      blockTime = new Date().toISOString();
     }
 
-    if (evmBlockDec !== currentSeiBlockNumber) {
-      console.warn(
-        `Block mismatch: Tendermint block=${currentSeiBlockNumber}, EVM block=${evmBlockDec}. Skipping update.`
-      );
-      return;
-    }
+    db.prepare(`
+      INSERT OR IGNORE INTO gas_prices (
+        blockNumber,
+        timestamp,
+        baseFeePerGas,
+        confidence50,
+        confidence70,
+        confidence90,
+        confidence99,
+        evmGasPrice
+      )
+      VALUES (?, ?, NULL, NULL, NULL, NULL, NULL, ?)
+    `).run(evmBlockDec, blockTime, gasPriceGwei);
 
-    // Update the same block row
     db.prepare(`
       UPDATE gas_prices
-      SET evmGasPrice = ?
+      SET timestamp = COALESCE(timestamp, ?),
+          evmGasPrice = ?
       WHERE blockNumber = ?
-    `).run(gasPriceGwei, currentSeiBlockNumber);
+    `).run(blockTime, gasPriceGwei, evmBlockDec);
 
-    // Update in-memory EVM cache
+    // 4) Update in-memory EVM cache
     evmDataCache = [
       {
         blockNumber: evmBlockDec.toString(),
-        timestamp: new Date().toISOString(),
+        timestamp: blockTime,
         confidence99: gasPriceGwei,
       },
     ];
 
-    // Purge data older than 30 days
+    // Purge old data
     purgeOldData();
   } catch (error) {
     console.error('Error polling EVM gas prices:', error.message);
@@ -188,6 +199,7 @@ const pollEvmGasPrices = async () => {
 setInterval(pollSeiGasPrices, 400);
 setInterval(pollEvmGasPrices, 400);
 
+// Serve static files
 app.use(express.static('public'));
 
 // API: Return historical data
@@ -218,7 +230,6 @@ app.get('/api/gas-prices', (req, res) => {
         ORDER BY blockNumber ASC
       `)
       .all(new Date(timeFilter).toISOString());
-
     res.json(rows);
   } catch (error) {
     console.error('Error fetching gas prices:', error.message);
