@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gas Price Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background-color: #1e1e1e;
+      color: #d4d4d4;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+
+    canvas {
+      background-color: #2d2d2d;
+      border: 1px solid #444;
+      margin-bottom: 20px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .controls button {
+      background-color: #444;
+      color: #d4d4d4;
+      border: none;
+      padding: 10px 20px;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: background-color 0.3s;
+    }
+
+    .controls button:hover {
+      background-color: #555;
+    }
+
+    .controls button.active {
+      background-color: #007acc;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <h1>Gas Price Tracker</h1>
+  <div class="controls">
+    <button id="oneHour">1 Hour</button>
+    <button id="oneDay">1 Day</button>
+    <button id="sevenDays" class="active">7 Days</button>
+    <button id="thirtyDays">30 Days</button>
+    <button id="pauseUpdates">Pause Updates</button>
+  </div>
+  <canvas id="gasPriceChart" width="800" height="400"></canvas>
+
+  <script>
+    const oneHourButton = document.getElementById("oneHour");
+    const oneDayButton = document.getElementById("oneDay");
+    const sevenDaysButton = document.getElementById("sevenDays");
+    const thirtyDaysButton = document.getElementById("thirtyDays");
+    const pauseUpdatesButton = document.getElementById("pauseUpdates");
+
+    const buttons = [oneHourButton, oneDayButton, sevenDaysButton, thirtyDaysButton];
+
+    let isPaused = false;
+    let currentRange = "7d";
+
+    // Highlight active button
+    const setActiveButton = (button) => {
+      buttons.forEach((btn) => btn.classList.remove("active"));
+      button.classList.add("active");
+    };
+
+    // Event listeners for buttons
+    oneHourButton.addEventListener("click", () => {
+      setActiveButton(oneHourButton);
+      currentRange = "1h";
+      fetchData();
+    });
+    oneDayButton.addEventListener("click", () => {
+      setActiveButton(oneDayButton);
+      currentRange = "1d";
+      fetchData();
+    });
+    sevenDaysButton.addEventListener("click", () => {
+      setActiveButton(sevenDaysButton);
+      currentRange = "7d";
+      fetchData();
+    });
+    thirtyDaysButton.addEventListener("click", () => {
+      setActiveButton(thirtyDaysButton);
+      currentRange = "30d";
+      fetchData();
+    });
+
+    pauseUpdatesButton.addEventListener("click", () => {
+      isPaused = !isPaused;
+      pauseUpdatesButton.textContent = isPaused ? "Resume Updates" : "Pause Updates";
+    });
+
+    // Initialize the Chart.js chart
+    const ctx = document.getElementById("gasPriceChart").getContext("2d");
+    const chart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: "Predicted Gas Price",
+            data: [],
+            borderColor: "#4caf50",
+            borderWidth: 2,
+            pointRadius: 4,
+            fill: false,
+          },
+          {
+            label: "Actual Gas Price",
+            data: [],
+            borderColor: "#e91e63",
+            borderDash: [5, 5],
+            borderWidth: 2,
+            pointRadius: 4,
+            fill: false,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: {
+            labels: { color: "#d4d4d4" },
+          },
+          tooltip: {
+            callbacks: {
+              title: (tooltipItems) => tooltipItems[0].label,
+              label: (tooltipItem) => {
+                const datasetLabel = tooltipItem.dataset.label || "";
+                const value = tooltipItem.raw || 0;
+                return `${datasetLabel}: ${value.toFixed(2)} Gwei`;
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            title: { display: true, text: "Block Details (Height & Time)", color: "#d4d4d4" },
+            ticks: { color: "#d4d4d4" },
+          },
+          y: {
+            title: { display: true, text: "Gas Price (Gwei)", color: "#d4d4d4" },
+            ticks: { color: "#d4d4d4" },
+            beginAtZero: true,
+          },
+        },
+      },
+    });
+
+    // Function to fetch data from the server
+    const fetchData = async () => {
+      if (isPaused) return;
+
+      try {
+        // Calls our corrected /api/chart-data route
+        const response = await fetch(`/api/chart-data?range=${currentRange}`);
+        const { seiData, evmData } = await response.json();
+
+        // seiData and evmData are arrays sorted oldest->newest by blockNumber
+        // So the final element is the most recent data point (appears on the far right)
+
+        // Build arrays for Chart.js
+        const labels = seiData.map(
+          (d) => `Block: ${d.blockNumber}\n${new Date(d.timestamp).toLocaleTimeString()}`
+        );
+        const predictedGasPrices = seiData.map((d) => d.confidence99 || 0);
+        const actualGasPrices = evmData.map((d) => d.confidence99 || 0);
+
+        chart.data.labels = labels;
+        chart.data.datasets[0].data = predictedGasPrices;
+        chart.data.datasets[1].data = actualGasPrices;
+        chart.update();
+      } catch (error) {
+        console.error("Error fetching chart data:", error);
+      }
+    };
+
+    // Fetch new data every 3 seconds
+    setInterval(fetchData, 3000);
+
+    // Initial load
+    fetchData();
+  </script>
+</body>
+</html>
