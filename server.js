@@ -244,21 +244,27 @@ app.get('/api/chart-data', (req, res) => {
 
     // Calculate the time filter for the selected range
     let timeFilter;
+    let maxDataPoints;
     switch (range) {
       case '1h':
         timeFilter = Date.now() - 60 * 60 * 1000; // 1 hour
+        maxDataPoints = 3600 / 3; // Assuming 3-second intervals
         break;
       case '1d':
         timeFilter = Date.now() - 24 * 60 * 60 * 1000; // 1 day
+        maxDataPoints = 24 * 3600 / 3;
         break;
       case '7d':
         timeFilter = Date.now() - 7 * 24 * 60 * 60 * 1000; // 7 days
+        maxDataPoints = 7 * 24 * 3600 / 3;
         break;
       case '30d':
         timeFilter = Date.now() - 30 * 24 * 60 * 60 * 1000; // 30 days
+        maxDataPoints = 30 * 24 * 3600 / 3;
         break;
       default:
         timeFilter = Date.now() - 7 * 24 * 60 * 60 * 1000; // Default to 7 days
+        maxDataPoints = 7 * 24 * 3600 / 3;
     }
 
     // Query rows strictly within the selected range
@@ -268,8 +274,9 @@ app.get('/api/chart-data', (req, res) => {
         FROM gas_prices
         WHERE timestamp >= ?
         ORDER BY blockNumber ASC
+        LIMIT ?
       `)
-      .all(new Date(timeFilter).toISOString());
+      .all(new Date(timeFilter).toISOString(), maxDataPoints);
 
     const seiData = rows.map((r) => ({
       blockNumber: r.blockNumber,

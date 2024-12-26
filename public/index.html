@@ -17,19 +17,19 @@
       align-items: center;
       padding: 20px;
     }
-  
+
     canvas {
       background-color: #2d2d2d;
       border: 1px solid #444;
       margin-bottom: 20px;
     }
-  
+
     .controls {
       display: flex;
       gap: 10px;
       margin-bottom: 20px;
     }
-  
+
     .controls button {
       background-color: #444;
       color: #d4d4d4;
@@ -39,22 +39,22 @@
       border-radius: 4px;
       transition: background-color 0.3s;
     }
-  
+
     .controls button:hover {
       background-color: #555;
     }
-  
+
     .controls button.active {
       background-color: #007acc;
       color: white;
     }
-  
+
     .toggle-controls {
       display: flex;
       gap: 10px;
       margin-bottom: 20px;
     }
-  
+
     /* Updated toggle button styles */
     .toggle-controls button {
       background-color: #007acc;
@@ -67,12 +67,12 @@
       font-weight: bold;
       transition: background-color 0.3s, transform 0.3s;
     }
-  
+
     .toggle-controls button:hover {
       background-color: #005ea8;
       transform: scale(1.05);
     }
-  
+
     .toggle-controls button.active {
       background-color: #003f6b;
       color: #d4d4d4;
@@ -82,9 +82,9 @@
 <body>
   <h1>Gas Price Tracker</h1>
   <div class="controls">
-    <button id="oneHour">1 Hour</button>
+    <button id="oneHour" class="active">1 Hour</button>
     <button id="oneDay">1 Day</button>
-    <button id="sevenDays" class="active">7 Days</button>
+    <button id="sevenDays">7 Days</button>
     <button id="thirtyDays">30 Days</button>
     <button id="pauseUpdates">Pause Updates</button>
   </div>
@@ -107,7 +107,7 @@
 
     const buttons = [oneHourButton, oneDayButton, sevenDaysButton, thirtyDaysButton];
     let isPaused = false;
-    let currentRange = "7d";
+    let currentRange = "1h"; // Default to 1 Hour
 
     // Highlight active button
     const setActiveButton = (button) => {
@@ -145,95 +145,95 @@
     // Initialize the chart
     const ctx = document.getElementById("gasPriceChart").getContext("2d");
     const chart = new Chart(ctx, {
-  type: "line",
-  data: {
-    labels: [],
-    datasets: [
-      {
-        label: "Predicted Gas Price",
-        data: [],
-        borderColor: "#4caf50",
-        borderWidth: 2,
-        pointRadius: 4,
-        fill: false,
-        yAxisID: "yLog",
-        showLine: true,
-        spanGaps: true,
+      type: "line",
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: "Predicted Gas Price",
+            data: [],
+            borderColor: "#4caf50",
+            borderWidth: 2,
+            pointRadius: 4,
+            fill: false,
+            yAxisID: "yLog",
+            showLine: true,
+            spanGaps: true,
+          },
+          {
+            label: "Actual Gas Price",
+            data: [],
+            borderColor: "#e91e63",
+            borderDash: [5, 5],
+            borderWidth: 2,
+            pointRadius: 4,
+            fill: false,
+            yAxisID: "yLinear",
+          },
+        ],
       },
-      {
-        label: "Actual Gas Price",
-        data: [],
-        borderColor: "#e91e63",
-        borderDash: [5, 5],
-        borderWidth: 2,
-        pointRadius: 4,
-        fill: false,
-        yAxisID: "yLinear",
-      },
-    ],
-  },
-  options: {
-    responsive: true,
-    animation: {
-      duration: 500, // Smooth transition duration
-      easing: "easeInOutQuad", // Easing style for transitions
-    },
-    plugins: {
-      legend: {
-        labels: { color: "#d4d4d4" },
-      },
-      tooltip: {
-        callbacks: {
-          title: (tooltipItems) => tooltipItems[0].label,
-          label: (tooltipItem) => {
-            const datasetLabel = tooltipItem.dataset.label || "";
-            const value = tooltipItem.raw || 0;
-            return `${datasetLabel}: ${value.toFixed(2)} Gwei`;
+      options: {
+        responsive: true,
+        animation: {
+          duration: 500, // Smooth transition duration
+          easing: "easeInOutQuad", // Easing style for transitions
+        },
+        plugins: {
+          legend: {
+            labels: { color: "#d4d4d4" },
+          },
+          tooltip: {
+            callbacks: {
+              title: (tooltipItems) => tooltipItems[0].label,
+              label: (tooltipItem) => {
+                const datasetLabel = tooltipItem.dataset.label || "";
+                const value = tooltipItem.raw || 0;
+                return `${datasetLabel}: ${value.toFixed(2)} Gwei`;
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            title: {
+              display: true,
+              text: "Block Details (Height & Time)",
+              color: "#d4d4d4",
+            },
+            ticks: { color: "#d4d4d4" },
+          },
+          yLinear: {
+            type: "linear",
+            display: true,
+            position: "left",
+            title: {
+              display: true,
+              text: "Gas Price (Gwei) - Linear",
+              color: "#d4d4d4",
+            },
+            ticks: { color: "#d4d4d4" },
+          },
+          yLog: {
+            type: "logarithmic",
+            display: true,
+            position: "right",
+            title: {
+              display: true,
+              text: "Gas Price (Gwei) - Log",
+              color: "#d4d4d4",
+            },
+            min: 0.5,
+            max: 2,
+            ticks: {
+              color: "#d4d4d4",
+              callback: function (value) {
+                return Number(value).toLocaleString();
+              },
+            },
           },
         },
       },
-    },
-    scales: {
-      x: {
-        title: {
-          display: true,
-          text: "Block Details (Height & Time)",
-          color: "#d4d4d4",
-        },
-        ticks: { color: "#d4d4d4" },
-      },
-      yLinear: {
-        type: "linear",
-        display: true,
-        position: "left",
-        title: {
-          display: true,
-          text: "Gas Price (Gwei) - Linear",
-          color: "#d4d4d4",
-        },
-        ticks: { color: "#d4d4d4" },
-      },
-      yLog: {
-        type: "logarithmic",
-        display: true,
-        position: "right",
-        title: {
-          display: true,
-          text: "Gas Price (Gwei) - Log",
-          color: "#d4d4d4",
-        },
-        min: 0.5,
-        max: 2,
-        ticks: {
-          color: "#d4d4d4",
-          callback: function (value) {
-            return Number(value).toLocaleString();
-          },
-        },
-      },
-    },
-  },
-});
+    });
 
     // Toggle line events
     togglePredictedButton.addEventListener("click", () => {
@@ -250,8 +250,7 @@
       chart.update();
     });
 
-
-// Data fetch
+    // Fetch data function
 const fetchData = async () => {
   if (isPaused) return;
 
@@ -259,31 +258,34 @@ const fetchData = async () => {
     const response = await fetch(`/api/chart-data?range=${currentRange}`);
     const { seiData, evmData } = await response.json();
 
-    // Ensure seiData and evmData are arrays
     const seiDataArray = Array.isArray(seiData) ? seiData : [];
     const evmDataArray = Array.isArray(evmData) ? evmData : [];
 
-    // Calculate the time filter for the current range
     const nowUTC = Date.now();
-    let timeFilter;
+    let timeFilter, maxDataPoints;
+
     switch (currentRange) {
       case "1h":
-        timeFilter = nowUTC - 60 * 60 * 1000; // 1 hour
+        timeFilter = nowUTC - 60 * 60 * 1000;
+        maxDataPoints = Math.floor(3600 / 0.4); // ~400ms intervals
         break;
       case "1d":
-        timeFilter = nowUTC - 24 * 60 * 60 * 1000; // 1 day
+        timeFilter = nowUTC - 24 * 60 * 60 * 1000;
+        maxDataPoints = Math.floor(24 * 3600 / 0.4);
         break;
       case "7d":
-        timeFilter = nowUTC - 7 * 24 * 60 * 60 * 1000; // 7 days
+        timeFilter = nowUTC - 7 * 24 * 60 * 60 * 1000;
+        maxDataPoints = Math.floor(7 * 24 * 3600 / 0.4);
         break;
       case "30d":
-        timeFilter = nowUTC - 30 * 24 * 60 * 60 * 1000; // 30 days
+        timeFilter = nowUTC - 30 * 24 * 60 * 60 * 1000;
+        maxDataPoints = Math.floor(30 * 24 * 3600 / 0.4);
         break;
       default:
-        timeFilter = nowUTC - 7 * 24 * 60 * 60 * 1000; // Default to 7 days
+        timeFilter = nowUTC - 60 * 60 * 1000;
+        maxDataPoints = Math.floor(3600 / 0.4);
     }
 
-    // Filter the data to include only points from the selected range
     const filteredSeiData = seiDataArray.filter(
       (d) => new Date(d.timestamp).getTime() >= timeFilter
     );
@@ -291,26 +293,37 @@ const fetchData = async () => {
       (d) => new Date(d.timestamp).getTime() >= timeFilter
     );
 
-    // Map filtered data to labels and datasets
-    const newLabels = filteredSeiData.map(
-      (d) => `Block: ${d.blockNumber}\n${new Date(d.timestamp).toLocaleTimeString()}`
-    );
-    const newPredictedGasPrices = filteredSeiData.map((d) => d.confidence99 || 0);
-    const newActualGasPrices = filteredEvmData.map((d) => d.confidence99 || 0);
+    filteredSeiData.forEach((point, index) => {
+      const label = `Block: ${point.blockNumber}\n${new Date(
+        point.timestamp
+      ).toLocaleTimeString()}`;
 
-    // Update the chart
-    chart.data.labels = newLabels;
-    chart.data.datasets[0].data = newPredictedGasPrices;
-    chart.data.datasets[1].data = newActualGasPrices;
+      if (!chart.data.labels.includes(label)) {
+        chart.data.labels.push(label);
+        chart.data.datasets[0].data.push(point.confidence99 || 0);
+        chart.data.datasets[1].data.push(filteredEvmData[index]?.confidence99 || 0);
+      }
+    });
 
-    chart.update();
+    while (chart.data.labels.length > maxDataPoints) {
+      chart.data.labels.shift();
+      chart.data.datasets[0].data.shift();
+      chart.data.datasets[1].data.shift();
+    }
+
+    chart.update("none");
   } catch (error) {
     console.error("Error fetching chart data:", error);
   }
 };
 
-    setInterval(fetchData, 5000); // Refresh every 5 seconds
-    fetchData(); // Initial load
+window.onload = () => {
+  setActiveButton(oneHourButton);
+  fetchData(); // Fetch data for default range
+};
+
+setInterval(fetchData, 5000); // Refresh every 5 seconds
+
   </script>
 </body>
 </html>
