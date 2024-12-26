@@ -122,91 +122,95 @@
     // Initialize the chart
     const ctx = document.getElementById("gasPriceChart").getContext("2d");
     const chart = new Chart(ctx, {
-      type: "line",
-      data: {
-        labels: [],
-        datasets: [
-          {
-            label: "Predicted Gas Price",
-            data: [],
-            borderColor: "#4caf50",
-            borderWidth: 2,
-            pointRadius: 4,
-            fill: false,
-            yAxisID: "yLog",
-            showLine: true,
-            spanGaps: true,
-          },
-          {
-            label: "Actual Gas Price",
-            data: [],
-            borderColor: "#e91e63",
-            borderDash: [5, 5],
-            borderWidth: 2,
-            pointRadius: 4,
-            fill: false,
-            yAxisID: "yLinear",
-          },
-        ],
+  type: "line",
+  data: {
+    labels: [],
+    datasets: [
+      {
+        label: "Predicted Gas Price",
+        data: [],
+        borderColor: "#4caf50",
+        borderWidth: 2,
+        pointRadius: 4,
+        fill: false,
+        yAxisID: "yLog",
+        showLine: true,
+        spanGaps: true,
       },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: {
-            labels: { color: "#d4d4d4" },
-          },
-          tooltip: {
-            callbacks: {
-              title: (tooltipItems) => tooltipItems[0].label,
-              label: (tooltipItem) => {
-                const datasetLabel = tooltipItem.dataset.label || "";
-                const value = tooltipItem.raw || 0;
-                return `${datasetLabel}: ${value.toFixed(2)} Gwei`;
-              },
-            },
-          },
-        },
-        scales: {
-          x: {
-            title: {
-              display: true,
-              text: "Block Details (Height & Time)",
-              color: "#d4d4d4",
-            },
-            ticks: { color: "#d4d4d4" },
-          },
-          yLinear: {
-            type: "linear",
-            display: true,
-            position: "left",
-            title: {
-              display: true,
-              text: "Gas Price (Gwei) - Linear",
-              color: "#d4d4d4",
-            },
-            ticks: { color: "#d4d4d4" },
-          },
-          yLog: {
-            type: "logarithmic",
-            display: true,
-            position: "right",
-            title: {
-              display: true,
-              text: "Gas Price (Gwei) - Log",
-              color: "#d4d4d4",
-            },
-            min: 0.5,
-            max: 2,
-            ticks: {
-              color: "#d4d4d4",
-              callback: function (value) {
-                return Number(value).toLocaleString();
-              },
-            },
+      {
+        label: "Actual Gas Price",
+        data: [],
+        borderColor: "#e91e63",
+        borderDash: [5, 5],
+        borderWidth: 2,
+        pointRadius: 4,
+        fill: false,
+        yAxisID: "yLinear",
+      },
+    ],
+  },
+  options: {
+    responsive: true,
+    animation: {
+      duration: 500, // Smooth transition duration
+      easing: "easeInOutQuad", // Easing style for transitions
+    },
+    plugins: {
+      legend: {
+        labels: { color: "#d4d4d4" },
+      },
+      tooltip: {
+        callbacks: {
+          title: (tooltipItems) => tooltipItems[0].label,
+          label: (tooltipItem) => {
+            const datasetLabel = tooltipItem.dataset.label || "";
+            const value = tooltipItem.raw || 0;
+            return `${datasetLabel}: ${value.toFixed(2)} Gwei`;
           },
         },
       },
-    });
+    },
+    scales: {
+      x: {
+        title: {
+          display: true,
+          text: "Block Details (Height & Time)",
+          color: "#d4d4d4",
+        },
+        ticks: { color: "#d4d4d4" },
+      },
+      yLinear: {
+        type: "linear",
+        display: true,
+        position: "left",
+        title: {
+          display: true,
+          text: "Gas Price (Gwei) - Linear",
+          color: "#d4d4d4",
+        },
+        ticks: { color: "#d4d4d4" },
+      },
+      yLog: {
+        type: "logarithmic",
+        display: true,
+        position: "right",
+        title: {
+          display: true,
+          text: "Gas Price (Gwei) - Log",
+          color: "#d4d4d4",
+        },
+        min: 0.5,
+        max: 2,
+        ticks: {
+          color: "#d4d4d4",
+          callback: function (value) {
+            return Number(value).toLocaleString();
+          },
+        },
+      },
+    },
+  },
+});
 
     // Toggle line events
     togglePredictedButton.addEventListener("click", () => {
@@ -220,29 +224,55 @@
       chart.update();
     });
 
-    // Data fetch
-    const fetchData = async () => {
-      if (isPaused) return;
-      try {
-        const response = await fetch(`/api/chart-data?range=${currentRange}`);
-        const { seiData, evmData } = await response.json();
+// Data fetch
+const fetchData = async () => {
+  if (isPaused) return;
 
-        const labels = seiData.map(
-          (d) => `Block: ${d.blockNumber}\n${new Date(d.timestamp).toLocaleTimeString()}`
-        );
-        const predictedGasPrices = seiData.map((d) => d.confidence99 || 0);
-        const actualGasPrices = evmData.map((d) => d.confidence99 || 0);
+  try {
+    const response = await fetch(`/api/chart-data?range=${currentRange}`);
+    const { seiData, evmData } = await response.json();
 
-        chart.data.labels = labels;
-        chart.data.datasets[0].data = predictedGasPrices;
-        chart.data.datasets[1].data = actualGasPrices;
-        chart.update();
-      } catch (error) {
-        console.error("Error fetching chart data:", error);
+    // Ensure seiData and evmData are arrays
+    const seiDataArray = Array.isArray(seiData) ? seiData : [];
+    const evmDataArray = Array.isArray(evmData) ? evmData : [];
+
+    // Determine max data points based on range
+    const maxDataPoints = {
+      "1h": 3600 / 3, // Assuming 3-second intervals
+      "1d": 24 * 3600 / 3,
+      "7d": 7 * 24 * 3600 / 3,
+      "30d": 30 * 24 * 3600 / 3,
+    }[currentRange];
+
+    // Add new data and remove old data for smooth updates
+    seiDataArray.forEach((d) => {
+      const label = `Block: ${d.blockNumber}\n${new Date(d.timestamp).toLocaleTimeString()}`;
+      const dataPoint = d.confidence99 || 0;
+
+      if (chart.data.labels.length >= maxDataPoints) {
+        chart.data.labels.shift(); // Remove oldest label
+        chart.data.datasets[0].data.shift(); // Remove oldest predicted gas price
       }
-    };
+      chart.data.labels.push(label); // Add new label
+      chart.data.datasets[0].data.push(dataPoint); // Add new data point
+    });
 
-    setInterval(fetchData, 3000); // Refresh every 3s
+    evmDataArray.forEach((d) => {
+      const dataPoint = d.confidence99 || 0;
+
+      if (chart.data.datasets[1].data.length >= maxDataPoints) {
+        chart.data.datasets[1].data.shift(); // Remove oldest actual gas price
+      }
+      chart.data.datasets[1].data.push(dataPoint); // Add new data point
+    });
+
+    chart.update(); // Update the chart without full rebuild
+  } catch (error) {
+    console.error("Error fetching chart data:", error);
+  }
+};
+
+    setInterval(fetchData, 5000); // Refresh every 5 seconds
     fetchData(); // Initial load
   </script>
 </body>

@@ -243,52 +243,57 @@ app.get('/api/chart-data', (req, res) => {
     const { range = '7d' } = req.query;
 
     let timeFilter = Date.now();
+    let maxDataPoints;
+
     switch (range) {
       case '1h':
         timeFilter -= 60 * 60 * 1000;
+        maxDataPoints = 3600 / 3; // Assuming 3-second intervals
         break;
       case '1d':
         timeFilter -= 24 * 60 * 60 * 1000;
+        maxDataPoints = 24 * 3600 / 3;
+        break;
+      case '7d':
+        timeFilter -= 7 * 24 * 60 * 60 * 1000;
+        maxDataPoints = 7 * 24 * 3600 / 3;
         break;
       case '30d':
         timeFilter -= 30 * 24 * 60 * 60 * 1000;
+        maxDataPoints = 30 * 24 * 3600 / 3;
         break;
       default:
         timeFilter -= 7 * 24 * 60 * 60 * 1000;
-    }
-
-    if (Date.now() - cacheTTL > 10000) {
-      console.warn('Cache expired, data may be stale.');
+        maxDataPoints = 7 * 24 * 3600 / 3;
     }
 
     const rows = db
       .prepare(`
-        SELECT blockNumber, timestamp,
-               baseFeePerGas,
-               confidence99,
-               evmGasPrice
+        SELECT *
         FROM gas_prices
         WHERE timestamp >= ?
         ORDER BY blockNumber ASC
+        LIMIT ?
       `)
-      .all(new Date(timeFilter).toISOString());
+      .all(new Date(timeFilter).toISOString(), maxDataPoints);
 
+    // Map data into required structures
     const seiData = rows.map((r) => ({
       blockNumber: r.blockNumber,
       timestamp: r.timestamp,
-      confidence99: r.confidence99,
+      confidence99: r.confidence99 || null,
     }));
 
     const evmData = rows.map((r) => ({
       blockNumber: r.blockNumber,
       timestamp: r.timestamp,
-      confidence99: r.evmGasPrice,
+      confidence99: r.evmGasPrice || null,
     }));
 
     res.json({ seiData, evmData });
   } catch (error) {
     console.error('Error fetching chart data:', error.message);
-    res.status(500).json({ error: 'Failed to fetch chart data.' });
+    res.status(500).json({ seiData: [], evmData: [] }); // Return empty arrays on error
   }
 });
 
