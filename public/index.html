@@ -84,9 +84,9 @@
   <h1>Gas Price Tracker</h1>
   <div class="controls">
     <button id="oneHour" class="active">1 Hour</button>
-    <button id="oneDay">1 Day</button>
-    <button id="sevenDays">7 Days</button>
-    <button id="thirtyDays">30 Days</button>
+    <button id="sixHours">6 Hours</button>
+    <button id="twelveHours">12 Hours</button>
+    <button id="twentyFourHours">24 Hours</button>
     <button id="pauseUpdates">Pause Updates</button>
   </div>
 
@@ -99,14 +99,14 @@
 
   <script>
     const oneHourButton = document.getElementById("oneHour");
-    const oneDayButton = document.getElementById("oneDay");
-    const sevenDaysButton = document.getElementById("sevenDays");
-    const thirtyDaysButton = document.getElementById("thirtyDays");
+    const sixHoursButton = document.getElementById("siixHours");
+    const twelveHoursButton = document.getElementById("twelveHours");
+    const twentyFourHoursButton = document.getElementById("twentyFourHours");
     const pauseUpdatesButton = document.getElementById("pauseUpdates");
     const togglePredictedButton = document.getElementById("togglePredicted");
     const toggleActualButton = document.getElementById("toggleActual");
 
-    const buttons = [oneHourButton, oneDayButton, sevenDaysButton, thirtyDaysButton];
+    const buttons = [oneHourButton, sixHoursButton, twelveHoursButton, twentyFourHoursButton];
     let isPaused = false;
     let currentRange = "1h"; // Default to 1 Hour
 
@@ -122,19 +122,19 @@
       currentRange = "1h";
       fetchData();
     });
-    oneDayButton.addEventListener("click", () => {
-      setActiveButton(oneDayButton);
-      currentRange = "1d";
+    sixHoursButton.addEventListener("click", () => {
+      setActiveButton(sixHoursButton);
+      currentRange = "6h";
       fetchData();
     });
-    sevenDaysButton.addEventListener("click", () => {
-      setActiveButton(sevenDaysButton);
-      currentRange = "7d";
+    twelveHoursButton.addEventListener("click", () => {
+      setActiveButton(twelveHoursButton);
+      currentRange = "12h";
       fetchData();
     });
-    thirtyDaysButton.addEventListener("click", () => {
-      setActiveButton(thirtyDaysButton);
-      currentRange = "30d";
+    twentyFourHoursButton.addEventListener("click", () => {
+      setActiveButton(twentyFourHoursButton);
+      currentRange = "24h";
       fetchData();
     });
 
@@ -265,25 +265,25 @@
     const nowUTC = Date.now();
     let timeFilter, maxDataPoints;
 
-    switch (currentRange) {
+        switch (currentRange) {
       case "1h":
-        timeFilter = nowUTC - 60 * 60 * 1000;
+        timeFilter = nowUTC - (60 * 60 * 1000); // 1 hour
         maxDataPoints = Math.floor(3600 / 0.4); // ~400ms intervals
         break;
-      case "1d":
-        timeFilter = nowUTC - 24 * 60 * 60 * 1000;
+      case "6h":
+        timeFilter = nowUTC - (6 * 60 * 60 * 1000); // 6 hours
+        maxDataPoints = Math.floor(6 * 3600 / 0.4);
+        break;
+      case "12h":
+        timeFilter = nowUTC - (12 * 60 * 60 * 1000); // 12 hours
+        maxDataPoints = Math.floor(12 * 3600 / 0.4);
+        break;
+      case "24h":
+        timeFilter = nowUTC - (24 * 60 * 60 * 1000); // 24 hours
         maxDataPoints = Math.floor(24 * 3600 / 0.4);
         break;
-      case "7d":
-        timeFilter = nowUTC - 7 * 24 * 60 * 60 * 1000;
-        maxDataPoints = Math.floor(7 * 24 * 3600 / 0.4);
-        break;
-      case "30d":
-        timeFilter = nowUTC - 30 * 24 * 60 * 60 * 1000;
-        maxDataPoints = Math.floor(30 * 24 * 3600 / 0.4);
-        break;
       default:
-        timeFilter = nowUTC - 60 * 60 * 1000;
+        timeFilter = nowUTC - (60 * 60 * 1000); // Default to 1 hour
         maxDataPoints = Math.floor(3600 / 0.4);
     }
 
