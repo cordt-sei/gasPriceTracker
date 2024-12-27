@@ -22,6 +22,7 @@
       background-color: #2d2d2d;
       border: 1px solid #444;
       margin-bottom: 20px;
+      will-change: transform;
     }
 
     .controls {
@@ -251,7 +252,7 @@
     });
 
     // Fetch data function
-const fetchData = async () => {
+    const fetchData = async () => {
   if (isPaused) return;
 
   try {
@@ -293,23 +294,24 @@ const fetchData = async () => {
       (d) => new Date(d.timestamp).getTime() >= timeFilter
     );
 
+    // Prepare new data
+    const newLabels = [];
+    const newPredictedData = [];
+    const newActualData = [];
+
     filteredSeiData.forEach((point, index) => {
       const label = `Block: ${point.blockNumber}\n${new Date(
         point.timestamp
       ).toLocaleTimeString()}`;
-
-      if (!chart.data.labels.includes(label)) {
-        chart.data.labels.push(label);
-        chart.data.datasets[0].data.push(point.confidence99 || 0);
-        chart.data.datasets[1].data.push(filteredEvmData[index]?.confidence99 || 0);
-      }
+      newLabels.push(label);
+      newPredictedData.push(point.confidence99 || 0);
+      newActualData.push(filteredEvmData[index]?.confidence99 || 0);
     });
 
-    while (chart.data.labels.length > maxDataPoints) {
-      chart.data.labels.shift();
-      chart.data.datasets[0].data.shift();
-      chart.data.datasets[1].data.shift();
-    }
+    // Use only the latest data up to maxDataPoints
+    chart.data.labels = newLabels.slice(-maxDataPoints);
+    chart.data.datasets[0].data = newPredictedData.slice(-maxDataPoints);
+    chart.data.datasets[1].data = newActualData.slice(-maxDataPoints);
 
     chart.update("none");
   } catch (error) {
