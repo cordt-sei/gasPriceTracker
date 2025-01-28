@@ -140,31 +140,34 @@
             label: "Predicted Gas Price",
             data: [],
             borderColor: "#4caf50",
-            borderWidth: 2,
-            pointRadius: 4,
+            borderWidth: 1,
+            pointRadius: 0,
             fill: false,
-            yAxisID: "yLog",
-            showLine: true,
-            spanGaps: true,
+            tension: 0.1,
+            yAxisID: "y",
           },
           {
             label: "Actual Gas Price",
             data: [],
             borderColor: "#e91e63",
-            borderDash: [5, 5],
             borderWidth: 2,
-            pointRadius: 4,
+            pointRadius: 0,
             fill: false,
-            yAxisID: "yLinear",
+            tension: 0.1,
+            yAxisID: "y",
           },
         ],
       },
       options: {
         responsive: true,
-				maintainAspectRatio: true,
+        maintainAspectRatio: true,
         animation: {
           duration: 500,
           easing: "easeInOutQuad",
+        },
+        interaction: {
+          intersect: false,
+          mode: 'index',
         },
         plugins: {
           legend: {
@@ -188,36 +191,29 @@
               text: "Block Details (Height & Time)",
               color: "#d4d4d4",
             },
-            ticks: { color: "#d4d4d4" },
+            ticks: {
+              color: "#d4d4d4",
+              maxRotation: 45,
+              minRotation: 45,
+            },
           },
-          yLinear: {
+          y: {
             type: "linear",
             display: true,
             position: "left",
             title: {
               display: true,
-              text: "Gas Price (Gwei) - Linear",
+              text: "Gas Price (Gwei)",
               color: "#d4d4d4",
             },
-            ticks: { color: "#d4d4d4" },
-          },
-          yLog: {
-            type: "logarithmic",
-            display: true,
-            position: "right",
-            title: {
-              display: true,
-              text: "Gas Price (Gwei) - Log",
-              color: "#d4d4d4",
-            },
-            min: 0.5,
-            max: 2,
             ticks: {
               color: "#d4d4d4",
-              callback: function (value) {
-                return Number(value).toLocaleString();
-              },
             },
+            grid: {
+              color: "#444",
+            },
+            beginAtZero: true,
+            grace: "10%",
           },
         },
       },
