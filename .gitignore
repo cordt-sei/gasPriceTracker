@@ -14,6 +14,7 @@ yarn-error.log*
 nodemon.json
 # SQLite database
 *.db
+*.db_journal
 
 # MacOS system files
 .DS_Store
