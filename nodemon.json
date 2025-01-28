@@ -1,6 +1,0 @@
-{
-  "watch": ["index.js", "server.js", "index.html"],
-  "ext": "js,json",
-  "exec": "node server.js",
-  "delay": "300ms"
-}
