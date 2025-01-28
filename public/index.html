@@ -15,20 +15,35 @@
       display: flex;
       flex-direction: column;
       align-items: center;
+      height: 100vh;
       padding: 20px;
+      box-sizing: border-box;
     }
 
     canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
       background-color: #2d2d2d;
       border: 1px solid #444;
       margin-bottom: 20px;
       will-change: transform;
     }
 
+    .chart-container {
+      flex-grow: 1;
+      width: 100%;
+      max-width: 1800px;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
     .controls {
       display: flex;
       gap: 10px;
-      margin-bottom: 20px;
+      margin-bottom: 10px;
     }
 
     .controls button {
@@ -91,59 +106,30 @@
   </div>
 
   <div class="toggle-controls">
-    <button id="togglePredicted">Toggle Predicted</button>
-    <button id="toggleActual">Toggle Actual</button>
+    <button id="togglePredicted">Predicted</button>
+    <button id="toggleActual">Actual</button>
   </div>
 
-  <canvas id="gasPriceChart" width="800" height="400"></canvas>
+  <div class="chart-container">
+    <canvas id="gasPriceChart"></canvas>
+  </div>
 
   <script>
+    // DOM Elements
     const oneHourButton = document.getElementById("oneHour");
-    const sixHoursButton = document.getElementById("siixHours");
+    const sixHoursButton = document.getElementById("sixHours");
     const twelveHoursButton = document.getElementById("twelveHours");
     const twentyFourHoursButton = document.getElementById("twentyFourHours");
     const pauseUpdatesButton = document.getElementById("pauseUpdates");
     const togglePredictedButton = document.getElementById("togglePredicted");
     const toggleActualButton = document.getElementById("toggleActual");
 
+    // Variables and State
     const buttons = [oneHourButton, sixHoursButton, twelveHoursButton, twentyFourHoursButton];
     let isPaused = false;
-    let currentRange = "1h"; // Default to 1 Hour
+    let currentRange = "1h";
 
-    // Highlight active button
-    const setActiveButton = (button) => {
-      buttons.forEach((btn) => btn.classList.remove("active"));
-      button.classList.add("active");
-    };
-
-    // Range filter button events
-    oneHourButton.addEventListener("click", () => {
-      setActiveButton(oneHourButton);
-      currentRange = "1h";
-      fetchData();
-    });
-    sixHoursButton.addEventListener("click", () => {
-      setActiveButton(sixHoursButton);
-      currentRange = "6h";
-      fetchData();
-    });
-    twelveHoursButton.addEventListener("click", () => {
-      setActiveButton(twelveHoursButton);
-      currentRange = "12h";
-      fetchData();
-    });
-    twentyFourHoursButton.addEventListener("click", () => {
-      setActiveButton(twentyFourHoursButton);
-      currentRange = "24h";
-      fetchData();
-    });
-
-    pauseUpdatesButton.addEventListener("click", () => {
-      isPaused = !isPaused;
-      pauseUpdatesButton.textContent = isPaused ? "Resume Updates" : "Pause Updates";
-    });
-
-    // Initialize the chart
+    // Initialize Chart
     const ctx = document.getElementById("gasPriceChart").getContext("2d");
     const chart = new Chart(ctx, {
       type: "line",
@@ -175,9 +161,10 @@
       },
       options: {
         responsive: true,
+				maintainAspectRatio: true,
         animation: {
-          duration: 500, // Smooth transition duration
-          easing: "easeInOutQuad", // Easing style for transitions
+          duration: 500,
+          easing: "easeInOutQuad",
         },
         plugins: {
           legend: {
@@ -236,96 +223,91 @@
       },
     });
 
-    // Toggle line events
+    // Helper Functions
+    const setActiveButton = (button) => {
+      buttons.forEach((btn) => btn.classList.remove("active"));
+      button.classList.add("active");
+    };
+
+    const fetchData = async () => {
+      if (isPaused) return;
+
+      try {
+        const response = await fetch(`/api/chart-data?range=${currentRange}`);
+        const { seiData, evmData } = await response.json();
+
+        const newLabels = [];
+        const predictedData = [];
+        const actualData = [];
+
+        seiData.forEach((point, index) => {
+          newLabels.push(`Block: ${point.blockNumber}\n${new Date(point.timestamp).toLocaleTimeString()}`);
+          predictedData.push(point.confidence99 || 0);
+          actualData.push(evmData[index]?.confidence99 || 0);
+        });
+
+        chart.data.labels = newLabels;
+        chart.data.datasets[0].data = predictedData;
+        chart.data.datasets[1].data = actualData;
+
+        chart.update("none");
+      } catch (error) {
+        console.error("Error fetching chart data:", error);
+      }
+    };
+
+    // Event Listeners
+    oneHourButton.addEventListener("click", () => {
+      setActiveButton(oneHourButton);
+      currentRange = "1h";
+      fetchData();
+    });
+
+    sixHoursButton.addEventListener("click", () => {
+      setActiveButton(sixHoursButton);
+      currentRange = "6h";
+      fetchData();
+    });
+
+    twelveHoursButton.addEventListener("click", () => {
+      setActiveButton(twelveHoursButton);
+      currentRange = "12h";
+      fetchData();
+    });
+
+    twentyFourHoursButton.addEventListener("click", () => {
+      setActiveButton(twentyFourHoursButton);
+      currentRange = "24h";
+      fetchData();
+    });
+
+    pauseUpdatesButton.addEventListener("click", () => {
+      isPaused = !isPaused;
+      pauseUpdatesButton.textContent = isPaused ? "Resume Updates" : "Pause Updates";
+    });
+
     togglePredictedButton.addEventListener("click", () => {
       const predictedDataset = chart.data.datasets[0];
       predictedDataset.hidden = !predictedDataset.hidden;
       togglePredictedButton.classList.toggle("active", !predictedDataset.hidden);
-      chart.update();
     });
 
     toggleActualButton.addEventListener("click", () => {
       const actualDataset = chart.data.datasets[1];
       actualDataset.hidden = !actualDataset.hidden;
       toggleActualButton.classList.toggle("active", !actualDataset.hidden);
-      chart.update();
     });
 
-    // Fetch data function
-    const fetchData = async () => {
-  if (isPaused) return;
-
-  try {
-    const response = await fetch(`/api/chart-data?range=${currentRange}`);
-    const { seiData, evmData } = await response.json();
-
-    const seiDataArray = Array.isArray(seiData) ? seiData : [];
-    const evmDataArray = Array.isArray(evmData) ? evmData : [];
-
-    const nowUTC = Date.now();
-    let timeFilter, maxDataPoints;
-
-        switch (currentRange) {
-      case "1h":
-        timeFilter = nowUTC - (60 * 60 * 1000); // 1 hour
-        maxDataPoints = Math.floor(3600 / 0.4); // ~400ms intervals
-        break;
-      case "6h":
-        timeFilter = nowUTC - (6 * 60 * 60 * 1000); // 6 hours
-        maxDataPoints = Math.floor(6 * 3600 / 0.4);
-        break;
-      case "12h":
-        timeFilter = nowUTC - (12 * 60 * 60 * 1000); // 12 hours
-        maxDataPoints = Math.floor(12 * 3600 / 0.4);
-        break;
-      case "24h":
-        timeFilter = nowUTC - (24 * 60 * 60 * 1000); // 24 hours
-        maxDataPoints = Math.floor(24 * 3600 / 0.4);
-        break;
-      default:
-        timeFilter = nowUTC - (60 * 60 * 1000); // Default to 1 hour
-        maxDataPoints = Math.floor(3600 / 0.4);
-    }
-
-    const filteredSeiData = seiDataArray.filter(
-      (d) => new Date(d.timestamp).getTime() >= timeFilter
-    );
-    const filteredEvmData = evmDataArray.filter(
-      (d) => new Date(d.timestamp).getTime() >= timeFilter
-    );
-
-    // Prepare new data
-    const newLabels = [];
-    const newPredictedData = [];
-    const newActualData = [];
-
-    filteredSeiData.forEach((point, index) => {
-      const label = `Block: ${point.blockNumber}\n${new Date(
-        point.timestamp
-      ).toLocaleTimeString()}`;
-      newLabels.push(label);
-      newPredictedData.push(point.confidence99 || 0);
-      newActualData.push(filteredEvmData[index]?.confidence99 || 0);
-    });
-
-    // Use only the latest data up to maxDataPoints
-    chart.data.labels = newLabels.slice(-maxDataPoints);
-    chart.data.datasets[0].data = newPredictedData.slice(-maxDataPoints);
-    chart.data.datasets[1].data = newActualData.slice(-maxDataPoints);
-
-    chart.update("none");
-  } catch (error) {
-    console.error("Error fetching chart data:", error);
-  }
-};
-
-window.onload = () => {
-  setActiveButton(oneHourButton);
-  fetchData(); // Fetch data for default range
-};
-
-setInterval(fetchData, 5000); // Refresh every 5 seconds
-
+    // Initial Data Fetch and Auto Refresh
+		window.addEventListener("load", () => {
+			setActiveButton(oneHourButton);
+			setInterval(fetchData, 5000);
+			try {
+				fetchData();
+			} catch (error) {
+				console.error("Error during initial data fetch:", error);
+			}
+		});
   </script>
 </body>
 </html>

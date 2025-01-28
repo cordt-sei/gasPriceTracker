@@ -3,7 +3,7 @@ import express from 'express';
 import Database from 'better-sqlite3';
 
 const app = express();
-const PORT = 3003;
+const PORT = 3303;
 
 // Initialize SQLite database
 const db = new Database('gas_prices.db');
@@ -12,7 +12,7 @@ const db = new Database('gas_prices.db');
 db.exec(`
   CREATE TABLE IF NOT EXISTS gas_prices (
     blockNumber INTEGER PRIMARY KEY,
-    timestamp TEXT,
+    timestamp TEXT NOT NULL,
     baseFeePerGas REAL,
     confidence50 REAL,
     confidence70 REAL,
@@ -22,11 +22,10 @@ db.exec(`
   );
 `);
 
+// Cache data for quick access
 let seiDataCache = [];
 let evmDataCache = [];
 let cacheTTL = Date.now();
-
-let currentSeiBlockNumber = null;
 
 // Helper to purge rows older than 30 days
 function purgeOldData() {
@@ -37,13 +36,14 @@ function purgeOldData() {
   `).run(thirtyDaysAgo);
 }
 
+// Poll Sei gas prices
 const pollSeiGasPrices = async () => {
   try {
     const [gasResponse, rpcResponse] = await Promise.all([
       axios.get('https://api.blocknative.com/gasprices/blockprices', {
         params: { chainid: 1329 },
       }),
-      axios.get('https://rpc.sei.basementnodes.ca/status'),
+      axios.get('http://10.70.48.165:26657/status'),
     ]);
 
     const syncInfo = rpcResponse.data?.sync_info;
@@ -54,15 +54,13 @@ const pollSeiGasPrices = async () => {
 
     const blockNumber = parseInt(syncInfo.latest_block_height, 10);
     const timestamp = syncInfo.latest_block_time;
-    currentSeiBlockNumber = blockNumber;
 
     const blockPrices = gasResponse.data?.blockPrices || [];
     if (!blockPrices.length) {
-      console.warn('No valid gas price data from Blocknative API:', gasResponse.data);
+      console.warn('No valid gas price data from Blocknative API.');
       return;
     }
 
-    // Grab the first predicted block
     const block = blockPrices[0];
     const baseFee = block.baseFeePerGas;
     const confidences = block.estimatedPrices.reduce((acc, curr) => {
@@ -70,8 +68,7 @@ const pollSeiGasPrices = async () => {
       return acc;
     }, {});
 
-    // Insert predicted row (if not present):
-    // 8 columns -> 7 placeholders + 1 literal NULL => 8 total.
+    // Insert or ignore duplicate blocks
     db.prepare(`
       INSERT OR IGNORE INTO gas_prices (
         blockNumber,
@@ -94,70 +91,41 @@ const pollSeiGasPrices = async () => {
       confidences.confidence99 || null
     );
 
-    // Update in-memory "latest" cache
+    // Update cache
     seiDataCache = [
-      {
-        blockNumber,
-        timestamp,
-        confidence99: confidences.confidence99 || null,
-      },
+      { blockNumber, timestamp, confidence99: confidences.confidence99 || null },
     ];
     cacheTTL = Date.now();
 
-    // Purge data older than 30 days
     purgeOldData();
   } catch (error) {
     console.error('Error polling Sei gas prices:', error.message);
   }
 };
 
-// fetch EVM block number + gas price, use Tendermint for block timestamp
+// Poll EVM gas prices
 const pollEvmGasPrices = async () => {
   try {
-    // get block number & gas price concurrently
     const [blockNumberResp, gasPriceResp] = await Promise.all([
       axios.post(
-        'https://evm-rpc.sei.basementnodes.ca',
-        {
-          jsonrpc: '2.0',
-          method: 'eth_blockNumber',
-          params: [],
-          id: 1,
-        },
+        'http://10.70.48.165:8545',
+        { jsonrpc: '2.0', method: 'eth_blockNumber', params: [], id: 1 },
         { headers: { 'Content-Type': 'application/json' } }
       ),
       axios.post(
-        'https://evm-rpc.sei.basementnodes.ca',
-        {
-          jsonrpc: '2.0',
-          method: 'eth_gasPrice',
-          params: [],
-          id: 1,
-        },
+        'http://10.70.48.165:8545',
+        { jsonrpc: '2.0', method: 'eth_gasPrice', params: [], id: 1 },
         { headers: { 'Content-Type': 'application/json' } }
       ),
     ]);
 
-    // Convert block number hex -> decimal
-    const evmBlockHex = blockNumberResp.data.result;
-    const evmBlockDec = parseInt(evmBlockHex, 16);
-
-    // Convert gas price hex -> decimal Wei -> Gwei
-    const gasPriceHex = gasPriceResp.data.result;
-    const gasPriceWei = parseInt(gasPriceHex, 16);
-    const gasPriceGwei = gasPriceWei / 1e9;
+    const evmBlockDec = parseInt(blockNumberResp.data.result, 16);
+    const gasPriceGwei = parseInt(gasPriceResp.data.result, 16) / 1e9;
 
     const tmBlockResp = await axios.get(
-      `https://rpc.sei.basementnodes.ca/block?height=${evmBlockDec}`
+      `http://10.70.48.165:26657/block?height=${evmBlockDec}`
     );
-    const tmBlockHeader = tmBlockResp.data?.block?.header;
-    let blockTime = tmBlockHeader?.time; // e.g. "2024-12-26T18:13:29.130124875Z"
-
-    if (!blockTime) {
-      // Fallback to "now" if the block isn't found, or handle differently
-      console.warn(`No Tendermint block time found for block #${evmBlockDec}`);
-      blockTime = new Date().toISOString();
-    }
+    const blockTime = tmBlockResp.data?.block?.header?.time || new Date().toISOString();
 
     db.prepare(`
       INSERT OR IGNORE INTO gas_prices (
@@ -173,53 +141,32 @@ const pollEvmGasPrices = async () => {
       VALUES (?, ?, NULL, NULL, NULL, NULL, NULL, ?)
     `).run(evmBlockDec, blockTime, gasPriceGwei);
 
-    db.prepare(`
-      UPDATE gas_prices
-      SET timestamp = COALESCE(timestamp, ?),
-          evmGasPrice = ?
-      WHERE blockNumber = ?
-    `).run(blockTime, gasPriceGwei, evmBlockDec);
+    evmDataCache = [{ blockNumber: evmBlockDec, timestamp: blockTime, confidence99: gasPriceGwei }];
 
-    // 4) Update in-memory EVM cache
-    evmDataCache = [
-      {
-        blockNumber: evmBlockDec.toString(),
-        timestamp: blockTime,
-        confidence99: gasPriceGwei,
-      },
-    ];
-
-    // Purge old data
     purgeOldData();
   } catch (error) {
     console.error('Error polling EVM gas prices:', error.message);
   }
 };
 
+// Polling intervals
 setInterval(pollSeiGasPrices, 400);
 setInterval(pollEvmGasPrices, 400);
 
 // Serve static files
 app.use(express.static('public'));
 
-// API: Return historical data
+// API: Historical data
 app.get('/api/gas-prices', (req, res) => {
-  const { range = '7d' } = req.query;
+  const { range = '24h' } = req.query;
 
-  let timeFilter = Date.now();
-  switch (range) {
-    case '1h':
-      timeFilter -= 60 * 60 * 1000;
-      break;
-    case '1d':
-      timeFilter -= 24 * 60 * 60 * 1000;
-      break;
-    case '30d':
-      timeFilter -= 30 * 24 * 60 * 60 * 1000;
-      break;
-    default:
-      timeFilter -= 7 * 24 * 60 * 60 * 1000;
-  }
+  const now = Date.now();
+  const timeFilter = new Date(now - {
+    '1h': 60 * 60 * 1000,
+    '6h': 6 * 60 * 60 * 1000,
+    '12h': 12 * 60 * 60 * 1000,
+    '24h': 24 * 60 * 60 * 1000,
+  }[range] || 24 * 60 * 60 * 1000).toISOString();
 
   try {
     const rows = db
@@ -229,7 +176,7 @@ app.get('/api/gas-prices', (req, res) => {
         WHERE timestamp >= ?
         ORDER BY blockNumber ASC
       `)
-      .all(new Date(timeFilter).toISOString());
+      .all(timeFilter);
     res.json(rows);
   } catch (error) {
     console.error('Error fetching gas prices:', error.message);
@@ -237,37 +184,26 @@ app.get('/api/gas-prices', (req, res) => {
   }
 });
 
-// API: Return data for chart
+// API: Chart data
 app.get('/api/chart-data', (req, res) => {
   try {
-    const { range = '7d' } = req.query;
+    const { range = '24h' } = req.query;
 
-    // Calculate the time filter for the selected range
-    let timeFilter;
-    let maxDataPoints;
-    switch (range) {
-      case '1h':
-        timeFilter = Date.now() - 60 * 60 * 1000; // 1 hour
-        maxDataPoints = 3600 / 3; // Assuming 3-second intervals
-        break;
-      case '1d':
-        timeFilter = Date.now() - 24 * 60 * 60 * 1000; // 1 day
-        maxDataPoints = 24 * 3600 / 3;
-        break;
-      case '7d':
-        timeFilter = Date.now() - 7 * 24 * 60 * 60 * 1000; // 7 days
-        maxDataPoints = 7 * 24 * 3600 / 3;
-        break;
-      case '30d':
-        timeFilter = Date.now() - 30 * 24 * 60 * 60 * 1000; // 30 days
-        maxDataPoints = 30 * 24 * 3600 / 3;
-        break;
-      default:
-        timeFilter = Date.now() - 7 * 24 * 60 * 60 * 1000; // Default to 7 days
-        maxDataPoints = 7 * 24 * 3600 / 3;
-    }
+    const now = Date.now();
+    const timeFilter = new Date(now - {
+      '1h': 60 * 60 * 1000,
+      '6h': 6 * 60 * 60 * 1000,
+      '12h': 12 * 60 * 60 * 1000,
+      '24h': 24 * 60 * 60 * 1000,
+    }[range] || 24 * 60 * 60 * 1000).toISOString();
 
-    // Query rows strictly within the selected range
+    const maxDataPoints = Math.floor({
+      '1h': 3600 / 0.4,
+      '6h': 6 * 3600 / 0.4,
+      '12h': 12 * 3600 / 0.4,
+      '24h': 24 * 3600 / 0.4,
+    }[range] || (24 * 3600) / 0.4);
+
     const rows = db
       .prepare(`
         SELECT *
@@ -276,28 +212,19 @@ app.get('/api/chart-data', (req, res) => {
         ORDER BY blockNumber ASC
         LIMIT ?
       `)
-      .all(new Date(timeFilter).toISOString(), maxDataPoints);
+      .all(timeFilter, maxDataPoints);
 
-    const seiData = rows.map((r) => ({
-      blockNumber: r.blockNumber,
-      timestamp: r.timestamp,
-      confidence99: r.confidence99 || null,
-    }));
-
-    const evmData = rows.map((r) => ({
-      blockNumber: r.blockNumber,
-      timestamp: r.timestamp,
-      confidence99: r.evmGasPrice || null,
-    }));
+    const seiData = rows.map((r) => ({ blockNumber: r.blockNumber, timestamp: r.timestamp, confidence99: r.confidence99 || null }));
+    const evmData = rows.map((r) => ({ blockNumber: r.blockNumber, timestamp: r.timestamp, confidence99: r.evmGasPrice || null }));
 
     res.json({ seiData, evmData });
   } catch (error) {
-    console.error("Error fetching chart data:", error.message);
-    res.status(500).json({ seiData: [], evmData: [] }); // Default to empty arrays on error
+    console.error('Error fetching chart data:', error.message);
+    res.status(500).json({ seiData: [], evmData: [] });
   }
 });
 
-// Start the server
+// Start server
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Server running at http://localhost:${PORT}`);
 });

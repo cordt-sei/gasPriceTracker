@@ -1,17 +1,18 @@
-import axios from "axios";
-import Database from "better-sqlite3";
+import axios from 'axios';
+import Database from 'better-sqlite3';
 
-const SEI_RPC_API = "https://rpc.sei.basementnodes.ca/status";
-const GAS_PRICE_API = "https://api.blocknative.com/gasprices/blockprices";
-const EVM_RPC_API = "https://evm-rpc.sei.basementnodes.ca";
-const POLL_INTERVAL = 400; // 400ms
+const SEI_RPC_API = 'https://rpc.sei.basementnodes.ca/status';
+const GAS_PRICE_API = 'https://api.blocknative.com/gasprices/blockprices';
+const EVM_RPC_API = 'https://evm-rpc.sei.basementnodes.ca';
+const SEI_POLL_INTERVAL = 5000; // 5 seconds for Blocknative API
+const EVM_POLL_INTERVAL = 400; // 400ms for EVM RPC
 const CHAIN_ID = 1329; // Sei network chain ID
 
 let seiDataCache = [];
 let evmDataCache = [];
 
 // Initialize SQLite database
-const db = new Database("gas_prices.db");
+const db = new Database('gas_prices.db');
 db.exec(`
   CREATE TABLE IF NOT EXISTS gas_prices (
     blockNumber INTEGER PRIMARY KEY,
@@ -86,12 +87,12 @@ const fetchEvmGasPrices = async () => {
     const response = await axios.post(
       EVM_RPC_API,
       {
-        jsonrpc: "2.0",
-        method: "eth_gasPrice",
+        jsonrpc: '2.0',
+        method: 'eth_gasPrice',
         params: [],
         id: 1,
       },
-      { headers: { "Content-Type": "application/json" } }
+      { headers: { 'Content-Type': 'application/json' } }
     );
 
     const gasPriceWei = parseInt(response.data.result, 16); // Convert from Wei to decimal
@@ -99,23 +100,20 @@ const fetchEvmGasPrices = async () => {
 
     evmDataCache = [
       {
-        blockNumber: "N/A",
+        blockNumber: 'N/A',
         timestamp: new Date().toISOString(),
         confidence99: gasPriceGwei,
       },
     ];
     return evmDataCache;
   } catch (error) {
-    console.error("Error fetching EVM gas prices:", error.message);
+    console.error('Error fetching EVM gas prices:', error.message);
     return [];
   }
 };
 
-const pollData = async () => {
-  await Promise.all([fetchSeiGasPrices(), fetchEvmGasPrices()]);
-};
-
-// Poll every 400ms
-setInterval(pollData, POLL_INTERVAL);
+// polling for current price data
+setInterval(fetchSeiGasPrices, SEI_POLL_INTERVAL);
+setInterval(fetchEvmGasPrices, EVM_POLL_INTERVAL);
 
 export { seiDataCache, evmDataCache };
