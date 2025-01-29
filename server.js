@@ -5,20 +5,56 @@ import Database from 'better-sqlite3';
 const app = express();
 const PORT = 3303;
 const DB_WRITE_INTERVAL = 10000;
-const MAX_CONCURRENT_BACKFILL = 50;
 
-// Cache and cleanup configuration
-const CACHE_CONFIG = {
-  '1h': 9000,    // 1 hour of blocks at 400ms = 9000 blocks
-  '6h': 54000,   // 6 hours worth
-  '12h': 108000, // 12 hours worth
-  '24h': 216000, // 24 hours worth
-  '72h': 648000, // 72 hours worth
-  '7d': 1512000  // 7 days worth
+// Memory-aware configuration
+const CONFIG = {
+  MAX_CONCURRENT_BACKFILL: 25,        // Reduced from 50
+  MAX_RECORDS_PER_QUERY: 500,         // Reduced from 1000
+  DB_CLEANUP_INTERVAL: 30 * 60 * 1000, // Run every 30 minutes
+  CACHE_LIMITS: {
+    '1h': 2000,    // Reduced from 9000
+    '6h': 5000,    // Reduced from 54000
+    '12h': 7500,   // Reduced from 108000
+    '24h': 10000,  // Reduced from 216000
+    '72h': 15000,  // Reduced from 648000
+    '7d': 20000    // Reduced from 1512000
+  },
+  SAMPLING_RATES: {
+    '1h': 1,
+    '6h': 12,     // Sample every 12th point
+    '12h': 24,    // Sample every 24th point
+    '24h': 48,    // Sample every 48th point
+    '72h': 144,   // Sample every 144th point
+    '7d': 336     // Sample every 336th point
+  }
 };
 
-const DB_CLEANUP_INTERVAL = 1 * 60 * 60 * 1000; // Run every hour
+// Add garbage collection helper
+function forceGC() {
+  if (global.gc) {
+    try {
+      global.gc();
+      console.log('Manual garbage collection executed');
+    } catch (e) {
+      console.error('Failed to force garbage collection:', e);
+    }
+  }
+}
 
+// Enhanced memory monitoring
+function logMemoryUsage() {
+  const used = process.memoryUsage();
+  console.log('Memory usage:');
+  for (let key in used) {
+    console.log(`${key}: ${Math.round(used[key] / 1024 / 1024 * 100) / 100} MB`);
+  }
+
+  // Force GC if heapUsed is above 500MB
+  if (used.heapUsed > 500 * 1024 * 1024) {
+    console.log('High memory usage detected, forcing garbage collection');
+    forceGC();
+  }
+}
 // API endpoints
 const SEI_RPC_API = 'https://rpc.sei.basementnodes.ca/status';
 const PREDICTED_GAS_API = 'https://api.blocknative.com/gasprices/blockprices';
@@ -88,8 +124,8 @@ function cleanupOldData() {
   }
 }
 
-// Set up periodic cleanup
-setInterval(cleanupOldData, DB_CLEANUP_INTERVAL);
+// Set up periodic cleanup using new CONFIG interval
+setInterval(cleanupOldData, CONFIG.DB_CLEANUP_INTERVAL);
 
 const updateMetrics = (blockHeight, value) => {
   if (blockHeight > lastProcessedBlock + 1) {
@@ -102,7 +138,7 @@ const updateMetrics = (blockHeight, value) => {
 
 // Enhanced cache management with dynamic sizing
 function manageCache(cache, timeRange = '1h') {
-  const maxSize = CACHE_CONFIG[timeRange] || CACHE_CONFIG['1h'];
+  const maxSize = CONFIG.CACHE_LIMITS[timeRange] || CONFIG.CACHE_LIMITS['1h'];
   
   if (cache.length > maxSize) {
     cache = cache.slice(-maxSize);
@@ -137,15 +173,27 @@ async function processBlockChunk(blocks) {
 }
 
 async function backfillMissedBlocks(fromBlock, toBlock) {
+  console.log(`Attempting to backfill blocks from ${fromBlock} to ${toBlock}`);
   const missingBlocks = [];
+  const blockDiff = toBlock - fromBlock;
+  
+  // Safety check - prevent excessive backfilling
+  if (blockDiff > 10000) {
+    console.warn(`Large block range detected (${blockDiff} blocks). Limiting to last 10000 blocks.`);
+    fromBlock = toBlock - 10000;
+  }
+  
   for (let height = fromBlock + 1; height < toBlock; height++) {
     missingBlocks.push(height);
   }
   
+  console.log(`Processing ${missingBlocks.length} missing blocks in chunks of ${CONFIG.MAX_CONCURRENT_BACKFILL}`);
+  
   // Process blocks in chunks to limit memory usage
-  const chunkSize = MAX_CONCURRENT_BACKFILL;
+  const chunkSize = CONFIG.MAX_CONCURRENT_BACKFILL;
   for (let i = 0; i < missingBlocks.length; i += chunkSize) {
     const chunk = missingBlocks.slice(i, i + chunkSize);
+    console.log(`Processing chunk ${Math.floor(i/chunkSize) + 1}/${Math.ceil(missingBlocks.length/chunkSize)}`);
     await processBlockChunk(chunk);
   }
 }
