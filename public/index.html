@@ -4,40 +4,60 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gas Price Tracker</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
-  <link rel="stylesheet" href="styles.css">
   <link rel="icon" href="/assets/icons/favicon.ico" type="image/x-icon">
   <link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/icons/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/assets/icons/favicon-16x16.png">
   <link rel="icon" sizes="192x192" href="/assets/icons/android-chrome-192x192.png">
   <link rel="icon" sizes="512x512" href="/assets/icons/android-chrome-512x512.png">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div class="container">
     <h1>Gas Price Tracker</h1>
+    
+    <div class="metrics-panel">
+      <div class="metric">
+        <span>Missed Blocks</span>
+        <span id="missedBlocks">0</span>
+      </div>
+      <div class="metric">
+        <span>Null Values</span>
+        <span id="nullValues">0</span>
+      </div>
+      <div class="metric">
+        <span>API Errors</span>
+        <span id="apiErrors">0</span>
+      </div>
+      <div class="metric">
+        <span>Last Block</span>
+        <span id="lastProcessedBlock">0</span>
+      </div>
+      <div class="metric">
+        <span>Last Sync</span>
+        <span id="lastSync">-</span>
+      </div>
+    </div>
 
     <div class="controls">
-      <!-- Dynamically populated by JavaScript -->
+      <!-- Dynamically populated -->
     </div>
 
     <div class="toggle-controls">
-      <button id="togglePredicted">Predicted</button>
-      <button id="toggleActual">Actual</button>
-      <button id="pauseUpdates">Pause Updates</button>
+      <button id="pauseUpdates">Pause</button>
     </div>
 
     <div class="chart-container">
       <canvas id="gasPriceChart"></canvas>
     </div>
   </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/chart.js" rel="preload" as="script"></script>
-  <script>
+  
+  <script src="https://cdn.jsdelivr.net/npm/chart.js" rel="preload" as="script"></script>  <script>
     window.addEventListener('load', () => {
       initChart();
-      setupTimeRangeButtons();
+      setupEventListeners();
       setUpdateInterval('1h');
       fetchData();
     });
