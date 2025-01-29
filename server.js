@@ -5,6 +5,19 @@ import Database from 'better-sqlite3';
 const app = express();
 const PORT = 3303;
 const DB_WRITE_INTERVAL = 10000;
+const MAX_CONCURRENT_BACKFILL = 50;
+
+// Cache and cleanup configuration
+const CACHE_CONFIG = {
+  '1h': 9000,    // 1 hour of blocks at 400ms = 9000 blocks
+  '6h': 54000,   // 6 hours worth
+  '12h': 108000, // 12 hours worth
+  '24h': 216000, // 24 hours worth
+  '72h': 648000, // 72 hours worth
+  '7d': 1512000  // 7 days worth
+};
+
+const DB_CLEANUP_INTERVAL = 1 * 60 * 60 * 1000; // Run every hour
 
 // API endpoints
 const SEI_RPC_API = 'https://rpc.sei.basementnodes.ca/status';
@@ -27,7 +40,11 @@ let seiGasPriceCache = [];
 let lastDbWrite = Date.now();
 let lastProcessedBlock = 0;
 
-const db = new Database('gas_prices.db');
+const db = new Database('gas_prices.db', {
+  verbose: console.log
+});
+
+// Initialize database with indices
 db.exec(`
   CREATE TABLE IF NOT EXISTS gas_prices (
     blockNumber INTEGER PRIMARY KEY,
@@ -43,6 +60,37 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_block_height ON gas_prices(blockNumber);
 `);
 
+// Enhanced database cleanup function
+function cleanupOldData() {
+  try {
+    // Keep only last 7 days of data
+    const cutoffTime = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    
+    // Get the count of records to be deleted
+    const countStmt = db.prepare('SELECT COUNT(*) as count FROM gas_prices WHERE timestamp < ?');
+    const { count } = countStmt.get(cutoffTime);
+    
+    if (count > 0) {
+      console.log(`Cleaning up ${count} old records from database`);
+      
+      // Delete old records
+      const deleteStmt = db.prepare('DELETE FROM gas_prices WHERE timestamp < ?');
+      const result = deleteStmt.run(cutoffTime);
+      
+      // Vacuum the database to reclaim space
+      if (result.changes > 0) {
+        db.exec('VACUUM');
+        console.log(`Cleaned up ${result.changes} records and optimized database`);
+      }
+    }
+  } catch (error) {
+    console.error('Error during database cleanup:', error);
+  }
+}
+
+// Set up periodic cleanup
+setInterval(cleanupOldData, DB_CLEANUP_INTERVAL);
+
 const updateMetrics = (blockHeight, value) => {
   if (blockHeight > lastProcessedBlock + 1) {
     metrics.missedBlocks += blockHeight - lastProcessedBlock - 1;
@@ -52,13 +100,20 @@ const updateMetrics = (blockHeight, value) => {
   metrics.lastSync = new Date();
 };
 
-async function backfillMissedBlocks(fromBlock, toBlock) {
-  const missingBlocks = [];
-  for (let height = fromBlock + 1; height < toBlock; height++) {
-    missingBlocks.push(height);
+// Enhanced cache management with dynamic sizing
+function manageCache(cache, timeRange = '1h') {
+  const maxSize = CACHE_CONFIG[timeRange] || CACHE_CONFIG['1h'];
+  
+  if (cache.length > maxSize) {
+    cache = cache.slice(-maxSize);
   }
   
-  await Promise.all(missingBlocks.map(async (height) => {
+  return cache;
+}
+
+// Helper function to process blocks in chunks
+async function processBlockChunk(blocks) {
+  return Promise.all(blocks.map(async (height) => {
     try {
       const response = await axios.post(EVM_RPC_API, {
         jsonrpc: '2.0',
@@ -79,6 +134,20 @@ async function backfillMissedBlocks(fromBlock, toBlock) {
       console.error(`Backfill error for block ${height}:`, error.message);
     }
   }));
+}
+
+async function backfillMissedBlocks(fromBlock, toBlock) {
+  const missingBlocks = [];
+  for (let height = fromBlock + 1; height < toBlock; height++) {
+    missingBlocks.push(height);
+  }
+  
+  // Process blocks in chunks to limit memory usage
+  const chunkSize = MAX_CONCURRENT_BACKFILL;
+  for (let i = 0; i < missingBlocks.length; i += chunkSize) {
+    const chunk = missingBlocks.slice(i, i + chunkSize);
+    await processBlockChunk(chunk);
+  }
 }
 
 async function pollPredictedGasPrice() {
@@ -109,12 +178,14 @@ async function pollPredictedGasPrice() {
     }, {});
 
     if (Date.now() - lastDbWrite >= DB_WRITE_INTERVAL) {
-      db.prepare(`
+      const stmt = db.prepare(`
         INSERT OR IGNORE INTO gas_prices (
           blockNumber, timestamp, baseFeePerGas,
           confidence50, confidence70, confidence90, confidence99
         ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(
+      `);
+      
+      stmt.run(
         blockNumber,
         timestamp,
         blockPrices.baseFeePerGas,
@@ -123,14 +194,16 @@ async function pollPredictedGasPrice() {
         confidences.confidence90 || null,
         confidences.confidence99 || null
       );
+      
       lastDbWrite = Date.now();
     }
 
-    predictedGasCache = [{
+    predictedGasCache.push({
       blockNumber,
       timestamp,
       confidence99: confidences.confidence99 || null
-    }];
+    });
+    predictedGasCache = manageCache(predictedGasCache);
 
     updateMetrics(blockNumber, confidences.confidence99);
   } catch (error) {
@@ -172,11 +245,12 @@ async function pollSeiGasPrice() {
       lastDbWrite = Date.now();
     }
 
-    seiGasPriceCache = [{
+    seiGasPriceCache.push({
       blockNumber: currentBlock,
       timestamp: new Date().toISOString(),
       gasPrice: gasPriceGwei
-    }];
+    });
+    seiGasPriceCache = manageCache(seiGasPriceCache);
 
     updateMetrics(currentBlock, gasPriceGwei);
     lastProcessedBlock = currentBlock;
@@ -186,27 +260,22 @@ async function pollSeiGasPrice() {
   }
 }
 
-const sampleRates = {
-  '1h': 1,
-  '6h': 30,
-  '12h': 60,
-  '24h': 300,
-  '72h': 900,
-  '7d': 3600
-};
-
+// Sample data based on timeframe
 function sampleData(data, timeframe) {
-  const rate = sampleRates[timeframe];
-  if (!rate) return data;
-  return data.filter((_, i) => i % rate === 0);
+  const samplingRates = {
+    '1h': 1,     // No sampling for 1h
+    '6h': 6,     // Sample every 6th point
+    '12h': 12,   // Sample every 12th point
+    '24h': 24,   // Sample every 24th point
+    '72h': 72,   // Sample every 72nd point
+    '7d': 168    // Sample every 168th point
+  };
+
+  const rate = samplingRates[timeframe] || 1;
+  return data.filter((_, index) => index % rate === 0);
 }
 
-app.use(express.static('public'));
-
-app.get('/api/metrics', (_, res) => {
-  res.json(metrics);
-});
-
+// Optimized chart data endpoint with sampling
 app.get('/api/chart-data', (req, res) => {
   try {
     const { range = '1h' } = req.query;
@@ -220,23 +289,35 @@ app.get('/api/chart-data', (req, res) => {
     };
 
     const timeFilter = new Date(Date.now() - (timeRanges[range] || timeRanges['24h'])).toISOString();
-    const rows = db.prepare(`
-      SELECT * FROM gas_prices 
+    
+    // Use more efficient query with LIMIT
+    const stmt = db.prepare(`
+      SELECT blockNumber, timestamp, confidence99, seiGasPrice 
+      FROM gas_prices 
       WHERE timestamp >= ? 
       ORDER BY blockNumber ASC
-    `).all(timeFilter);
+      LIMIT 10000
+    `);
+    
+    const rows = stmt.all(timeFilter);
 
-    const predictedData = sampleData(rows.map(r => ({
+    let predictedData = rows.map(r => ({
       blockNumber: r.blockNumber,
       timestamp: r.timestamp,
       confidence99: r.confidence99
-    })), range);
+    }));
 
-    const seiGasPriceData = sampleData(rows.map(r => ({
+    let seiGasPriceData = rows.map(r => ({
       blockNumber: r.blockNumber,
       timestamp: r.timestamp,
       confidence99: r.seiGasPrice
-    })), range);
+    }));
+
+    // Apply sampling for larger timeframes
+    if (range !== '1h') {
+      predictedData = sampleData(predictedData, range);
+      seiGasPriceData = sampleData(seiGasPriceData, range);
+    }
 
     res.json({ 
       predictedData, 
@@ -253,6 +334,13 @@ app.get('/api/chart-data', (req, res) => {
   }
 });
 
+app.use(express.static('public'));
+
+app.get('/api/metrics', (_, res) => {
+  res.json(metrics);
+});
+
+// Initialize with appropriate intervals
 setInterval(pollPredictedGasPrice, 5000);
 setInterval(pollSeiGasPrice, 500);
 

@@ -1,6 +1,6 @@
 {
   "name": "gasPriceTracker",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "main": "server.js",
   "type": "module",
   "license": "MIT",
@@ -11,9 +11,8 @@
   "dependencies": {
     "axios": "^1.7.9",
     "better-sqlite3": "^11.7.0",
-    "chart.js": "^4.4.7",
-    "express": "^4.21.2",
-    "date-fns": "^2.30.0"
+    "chartjs-adapter-date-fns": "^3.0.0",
+    "express": "^4.21.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
