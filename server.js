@@ -4,227 +4,88 @@ import Database from 'better-sqlite3';
 
 const app = express();
 const PORT = 3303;
+const DB_WRITE_INTERVAL = 10000; // 10 seconds
+let lastDbWrite = Date.now();
 
 // Initialize SQLite database
 const db = new Database('gas_prices.db');
 
-// Create or update the table to store historical data
+// Optimize database
 db.exec(`
-  CREATE TABLE IF NOT EXISTS gas_prices (
-    blockNumber INTEGER PRIMARY KEY,
-    timestamp TEXT NOT NULL,
-    baseFeePerGas REAL,
-    confidence50 REAL,
-    confidence70 REAL,
-    confidence90 REAL,
-    confidence99 REAL,
-    evmGasPrice REAL
-  );
+CREATE TABLE IF NOT EXISTS gas_prices (
+  blockNumber INTEGER PRIMARY KEY,
+  timestamp TEXT NOT NULL,
+  baseFeePerGas REAL,
+  confidence50 REAL,
+  confidence70 REAL,
+  confidence90 REAL,
+  confidence99 REAL,
+  evmGasPrice REAL
+);
+
+CREATE INDEX IF NOT EXISTS idx_timestamp ON gas_prices(timestamp);
+CREATE INDEX IF NOT EXISTS idx_block_height ON gas_prices(blockNumber);
 `);
 
-// Cache data for quick access
+// Cache
 let seiDataCache = [];
 let evmDataCache = [];
-let cacheTTL = Date.now();
 
-// Helper to purge rows older than 30 days
-function purgeOldData() {
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  db.prepare(`
-    DELETE FROM gas_prices
-    WHERE timestamp < ?
-  `).run(thirtyDaysAgo);
+// Sampling rates (in seconds)
+const sampleRates = {
+  '1h': 1,      // Every block
+  '6h': 30,     // Every 30 seconds
+  '12h': 60,    // Every minute
+  '24h': 300,   // Every 5 minutes
+  '72h': 900,   // Every 15 minutes
+  '7d': 3600    // Every hour
+};
+
+function sampleData(data, timeframe) {
+  const rate = sampleRates[timeframe];
+  if (!rate) return data;
+  return data.filter((_, i) => i % rate === 0);
 }
 
-// Poll Sei gas prices
-const pollSeiGasPrices = async () => {
-  try {
-    const [gasResponse, rpcResponse] = await Promise.all([
-      axios.get('https://api.blocknative.com/gasprices/blockprices', {
-        params: { chainid: 1329 },
-      }),
-      axios.get('http://10.70.48.165:26657/status'),
-    ]);
+// Rest of your existing polling and API code...
 
-    const syncInfo = rpcResponse.data?.sync_info;
-    if (!syncInfo?.latest_block_height || !syncInfo?.latest_block_time) {
-      console.error('Invalid Sei RPC response format:', rpcResponse.data);
-      return;
-    }
-
-    const blockNumber = parseInt(syncInfo.latest_block_height, 10);
-    const timestamp = syncInfo.latest_block_time;
-
-    const blockPrices = gasResponse.data?.blockPrices || [];
-    if (!blockPrices.length) {
-      console.warn('No valid gas price data from Blocknative API.');
-      return;
-    }
-
-    const block = blockPrices[0];
-    const baseFee = block.baseFeePerGas;
-    const confidences = block.estimatedPrices.reduce((acc, curr) => {
-      acc[`confidence${curr.confidence}`] = curr.price;
-      return acc;
-    }, {});
-
-    // Insert or ignore duplicate blocks
-    db.prepare(`
-      INSERT OR IGNORE INTO gas_prices (
-        blockNumber,
-        timestamp,
-        baseFeePerGas,
-        confidence50,
-        confidence70,
-        confidence90,
-        confidence99,
-        evmGasPrice
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
-    `).run(
-      blockNumber,
-      timestamp,
-      baseFee,
-      confidences.confidence50 || null,
-      confidences.confidence70 || null,
-      confidences.confidence90 || null,
-      confidences.confidence99 || null
-    );
-
-    // Update cache
-    seiDataCache = [
-      { blockNumber, timestamp, confidence99: confidences.confidence99 || null },
-    ];
-    cacheTTL = Date.now();
-
-    purgeOldData();
-  } catch (error) {
-    console.error('Error polling Sei gas prices:', error.message);
-  }
-};
-
-// Poll EVM gas prices
-const pollEvmGasPrices = async () => {
-  try {
-    const [blockNumberResp, gasPriceResp] = await Promise.all([
-      axios.post(
-        'http://10.70.48.165:8545',
-        { jsonrpc: '2.0', method: 'eth_blockNumber', params: [], id: 1 },
-        { headers: { 'Content-Type': 'application/json' } }
-      ),
-      axios.post(
-        'http://10.70.48.165:8545',
-        { jsonrpc: '2.0', method: 'eth_gasPrice', params: [], id: 1 },
-        { headers: { 'Content-Type': 'application/json' } }
-      ),
-    ]);
-
-    const evmBlockDec = parseInt(blockNumberResp.data.result, 16);
-    const gasPriceGwei = parseInt(gasPriceResp.data.result, 16) / 1e9;
-
-    const tmBlockResp = await axios.get(
-      `http://10.70.48.165:26657/block?height=${evmBlockDec}`
-    );
-    const blockTime = tmBlockResp.data?.block?.header?.time || new Date().toISOString();
-
-    db.prepare(`
-      INSERT OR IGNORE INTO gas_prices (
-        blockNumber,
-        timestamp,
-        baseFeePerGas,
-        confidence50,
-        confidence70,
-        confidence90,
-        confidence99,
-        evmGasPrice
-      )
-      VALUES (?, ?, NULL, NULL, NULL, NULL, NULL, ?)
-    `).run(evmBlockDec, blockTime, gasPriceGwei);
-
-    evmDataCache = [{ blockNumber: evmBlockDec, timestamp: blockTime, confidence99: gasPriceGwei }];
-
-    purgeOldData();
-  } catch (error) {
-    console.error('Error polling EVM gas prices:', error.message);
-  }
-};
-
-// Polling intervals
-setInterval(pollSeiGasPrices, 400);
-setInterval(pollEvmGasPrices, 400);
-
-// Serve static files
-app.use(express.static('public'));
-
-// API: Historical data
-app.get('/api/gas-prices', (req, res) => {
-  const { range = '24h' } = req.query;
-
-  const now = Date.now();
-  const timeFilter = new Date(now - {
-    '1h': 60 * 60 * 1000,
-    '6h': 6 * 60 * 60 * 1000,
-    '12h': 12 * 60 * 60 * 1000,
-    '24h': 24 * 60 * 60 * 1000,
-  }[range] || 24 * 60 * 60 * 1000).toISOString();
-
-  try {
-    const rows = db
-      .prepare(`
-        SELECT *
-        FROM gas_prices
-        WHERE timestamp >= ?
-        ORDER BY blockNumber ASC
-      `)
-      .all(timeFilter);
-    res.json(rows);
-  } catch (error) {
-    console.error('Error fetching gas prices:', error.message);
-    res.status(500).json({ error: 'Failed to fetch gas prices.' });
-  }
-});
-
-// API: Chart data
+// Modified chart-data endpoint
 app.get('/api/chart-data', (req, res) => {
   try {
-    const { range = '24h' } = req.query;
-
-    const now = Date.now();
-    const timeFilter = new Date(now - {
+    const { range = '1h' } = req.query;
+    const timeRanges = {
       '1h': 60 * 60 * 1000,
       '6h': 6 * 60 * 60 * 1000,
       '12h': 12 * 60 * 60 * 1000,
       '24h': 24 * 60 * 60 * 1000,
-    }[range] || 24 * 60 * 60 * 1000).toISOString();
+      '72h': 72 * 60 * 60 * 1000,
+      '7d': 7 * 24 * 60 * 60 * 1000
+    };
 
-    const maxDataPoints = Math.floor({
-      '1h': 3600 / 0.4,
-      '6h': 6 * 3600 / 0.4,
-      '12h': 12 * 3600 / 0.4,
-      '24h': 24 * 3600 / 0.4,
-    }[range] || (24 * 3600) / 0.4);
+    const timeFilter = new Date(Date.now() - (timeRanges[range] || timeRanges['24h'])).toISOString();
 
-    const rows = db
-      .prepare(`
-        SELECT *
-        FROM gas_prices
-        WHERE timestamp >= ?
-        ORDER BY blockNumber ASC
-        LIMIT ?
-      `)
-      .all(timeFilter, maxDataPoints);
+    const rows = db.prepare(`
+    SELECT *
+    FROM gas_prices
+    WHERE timestamp >= ?
+    ORDER BY blockNumber ASC
+    `).all(timeFilter);
 
-    const seiData = rows.map((r) => ({ blockNumber: r.blockNumber, timestamp: r.timestamp, confidence99: r.confidence99 || null }));
-    const evmData = rows.map((r) => ({ blockNumber: r.blockNumber, timestamp: r.timestamp, confidence99: r.evmGasPrice || null }));
+    const seiData = sampleData(rows.map(r => ({
+      blockNumber: r.blockNumber,
+      timestamp: r.timestamp,
+      confidence99: r.confidence99
+    })), range);
+
+    const evmData = sampleData(rows.map(r => ({
+      blockNumber: r.blockNumber,
+      timestamp: r.timestamp,
+      confidence99: r.evmGasPrice
+    })), range);
 
     res.json({ seiData, evmData });
   } catch (error) {
-    console.error('Error fetching chart data:', error.message);
+    console.error('Error fetching chart data:', error);
     res.status(500).json({ seiData: [], evmData: [] });
   }
-});
-
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
 });

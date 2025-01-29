@@ -1,309 +1,46 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gas Price Tracker</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background-color: #1e1e1e;
-      color: #d4d4d4;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      height: 100vh;
-      padding: 20px;
-      box-sizing: border-box;
-    }
-
-    canvas {
-      display: block;
-      width: 100%;
-      height: 100%;
-      background-color: #2d2d2d;
-      border: 1px solid #444;
-      margin-bottom: 20px;
-      will-change: transform;
-    }
-
-    .chart-container {
-      flex-grow: 1;
-      width: 100%;
-      max-width: 1800px;
-      height: 100%;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-
-    .controls {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
-
-    .controls button {
-      background-color: #444;
-      color: #d4d4d4;
-      border: none;
-      padding: 10px 20px;
-      cursor: pointer;
-      border-radius: 4px;
-      transition: background-color 0.3s;
-    }
-
-    .controls button:hover {
-      background-color: #555;
-    }
-
-    .controls button.active {
-      background-color: #007acc;
-      color: white;
-    }
-
-    .toggle-controls {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 20px;
-    }
-
-    /* Updated toggle button styles */
-    .toggle-controls button {
-      background-color: #007acc;
-      color: #fff;
-      border: none;
-      padding: 10px 20px;
-      border-radius: 20px;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: bold;
-      transition: background-color 0.3s, transform 0.3s;
-    }
-
-    .toggle-controls button:hover {
-      background-color: #005ea8;
-      transform: scale(1.05);
-    }
-
-    .toggle-controls button.active {
-      background-color: #003f6b;
-      color: #d4d4d4;
-    }
-  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="/assets/icons/favicon.ico" type="image/x-icon">
+  <link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/icons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/icons/favicon-16x16.png">
+  <link rel="icon" sizes="192x192" href="/assets/icons/android-chrome-192x192.png">
+  <link rel="icon" sizes="512x512" href="/assets/icons/android-chrome-512x512.png">
 </head>
 <body>
-  <h1>Gas Price Tracker</h1>
-  <div class="controls">
-    <button id="oneHour" class="active">1 Hour</button>
-    <button id="sixHours">6 Hours</button>
-    <button id="twelveHours">12 Hours</button>
-    <button id="twentyFourHours">24 Hours</button>
-    <button id="pauseUpdates">Pause Updates</button>
+  <div class="container">
+    <h1>Gas Price Tracker</h1>
+
+    <div class="controls">
+      <!-- Dynamically populated by JavaScript -->
+    </div>
+
+    <div class="toggle-controls">
+      <button id="togglePredicted">Predicted</button>
+      <button id="toggleActual">Actual</button>
+      <button id="pauseUpdates">Pause Updates</button>
+    </div>
+
+    <div class="chart-container">
+      <canvas id="gasPriceChart"></canvas>
+    </div>
   </div>
 
-  <div class="toggle-controls">
-    <button id="togglePredicted">Predicted</button>
-    <button id="toggleActual">Actual</button>
-  </div>
-
-  <div class="chart-container">
-    <canvas id="gasPriceChart"></canvas>
-  </div>
-
+  <script src="https://cdn.jsdelivr.net/npm/chart.js" rel="preload" as="script"></script>
   <script>
-    // DOM Elements
-    const oneHourButton = document.getElementById("oneHour");
-    const sixHoursButton = document.getElementById("sixHours");
-    const twelveHoursButton = document.getElementById("twelveHours");
-    const twentyFourHoursButton = document.getElementById("twentyFourHours");
-    const pauseUpdatesButton = document.getElementById("pauseUpdates");
-    const togglePredictedButton = document.getElementById("togglePredicted");
-    const toggleActualButton = document.getElementById("toggleActual");
-
-    // Variables and State
-    const buttons = [oneHourButton, sixHoursButton, twelveHoursButton, twentyFourHoursButton];
-    let isPaused = false;
-    let currentRange = "1h";
-
-    // Initialize Chart
-    const ctx = document.getElementById("gasPriceChart").getContext("2d");
-    const chart = new Chart(ctx, {
-      type: "line",
-      data: {
-        labels: [],
-        datasets: [
-          {
-            label: "Predicted Gas Price",
-            data: [],
-            borderColor: "#4caf50",
-            borderWidth: 1,
-            pointRadius: 0,
-            fill: false,
-            tension: 0.1,
-            yAxisID: "y",
-          },
-          {
-            label: "Actual Gas Price",
-            data: [],
-            borderColor: "#e91e63",
-            borderWidth: 2,
-            pointRadius: 0,
-            fill: false,
-            tension: 0.1,
-            yAxisID: "y",
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: true,
-        animation: {
-          duration: 500,
-          easing: "easeInOutQuad",
-        },
-        interaction: {
-          intersect: false,
-          mode: 'index',
-        },
-        plugins: {
-          legend: {
-            labels: { color: "#d4d4d4" },
-          },
-          tooltip: {
-            callbacks: {
-              title: (tooltipItems) => tooltipItems[0].label,
-              label: (tooltipItem) => {
-                const datasetLabel = tooltipItem.dataset.label || "";
-                const value = tooltipItem.raw || 0;
-                return `${datasetLabel}: ${value.toFixed(2)} Gwei`;
-              },
-            },
-          },
-        },
-        scales: {
-          x: {
-            title: {
-              display: true,
-              text: "Block Details (Height & Time)",
-              color: "#d4d4d4",
-            },
-            ticks: {
-              color: "#d4d4d4",
-              maxRotation: 45,
-              minRotation: 45,
-            },
-          },
-          y: {
-            type: "linear",
-            display: true,
-            position: "left",
-            title: {
-              display: true,
-              text: "Gas Price (Gwei)",
-              color: "#d4d4d4",
-            },
-            ticks: {
-              color: "#d4d4d4",
-            },
-            grid: {
-              color: "#444",
-            },
-            beginAtZero: true,
-            grace: "10%",
-          },
-        },
-      },
-    });
-
-    // Helper Functions
-    const setActiveButton = (button) => {
-      buttons.forEach((btn) => btn.classList.remove("active"));
-      button.classList.add("active");
-    };
-
-    const fetchData = async () => {
-      if (isPaused) return;
-
-      try {
-        const response = await fetch(`/api/chart-data?range=${currentRange}`);
-        const { seiData, evmData } = await response.json();
-
-        const newLabels = [];
-        const predictedData = [];
-        const actualData = [];
-
-        seiData.forEach((point, index) => {
-          newLabels.push(`Block: ${point.blockNumber}\n${new Date(point.timestamp).toLocaleTimeString()}`);
-          predictedData.push(point.confidence99 || 0);
-          actualData.push(evmData[index]?.confidence99 || 0);
-        });
-
-        chart.data.labels = newLabels;
-        chart.data.datasets[0].data = predictedData;
-        chart.data.datasets[1].data = actualData;
-
-        chart.update("none");
-      } catch (error) {
-        console.error("Error fetching chart data:", error);
-      }
-    };
-
-    // Event Listeners
-    oneHourButton.addEventListener("click", () => {
-      setActiveButton(oneHourButton);
-      currentRange = "1h";
+    window.addEventListener('load', () => {
+      initChart();
+      setupTimeRangeButtons();
+      setUpdateInterval('1h');
       fetchData();
     });
-
-    sixHoursButton.addEventListener("click", () => {
-      setActiveButton(sixHoursButton);
-      currentRange = "6h";
-      fetchData();
-    });
-
-    twelveHoursButton.addEventListener("click", () => {
-      setActiveButton(twelveHoursButton);
-      currentRange = "12h";
-      fetchData();
-    });
-
-    twentyFourHoursButton.addEventListener("click", () => {
-      setActiveButton(twentyFourHoursButton);
-      currentRange = "24h";
-      fetchData();
-    });
-
-    pauseUpdatesButton.addEventListener("click", () => {
-      isPaused = !isPaused;
-      pauseUpdatesButton.textContent = isPaused ? "Resume Updates" : "Pause Updates";
-    });
-
-    togglePredictedButton.addEventListener("click", () => {
-      const predictedDataset = chart.data.datasets[0];
-      predictedDataset.hidden = !predictedDataset.hidden;
-      togglePredictedButton.classList.toggle("active", !predictedDataset.hidden);
-    });
-
-    toggleActualButton.addEventListener("click", () => {
-      const actualDataset = chart.data.datasets[1];
-      actualDataset.hidden = !actualDataset.hidden;
-      toggleActualButton.classList.toggle("active", !actualDataset.hidden);
-    });
-
-    // Initial Data Fetch and Auto Refresh
-		window.addEventListener("load", () => {
-			setActiveButton(oneHourButton);
-			setInterval(fetchData, 5000);
-			try {
-				fetchData();
-			} catch (error) {
-				console.error("Error during initial data fetch:", error);
-			}
-		});
   </script>
 </body>
 </html>
