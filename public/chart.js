@@ -1,15 +1,17 @@
+// chart.js
 let chart;
 let updateInterval;
 let currentRange = '1h';
 let isPaused = false;
+let lastDataTimestamp = null;
 
 const updateIntervals = {
-  '1h': 400,    // Update every 400ms for 1h view
-  '6h': 5000,   // Every 5s for 6h view
-  '12h': 10000, // Every 10s for 12h view
-  '24h': 30000, // Every 30s for 24h view
-  '72h': 60000, // Every minute for 72h view
-  '7d': 300000  // Every 5 minutes for 7d view
+  '1h': 1000,    // 1s
+  '6h': 5000,
+  '12h': 10000,
+  '24h': 30000,
+  '72h': 60000,
+  '7d': 300000
 };
 
 function initChart() {
@@ -55,9 +57,7 @@ function initChart() {
           position: 'top',
           labels: { 
             color: '#d4d4d4',
-            font: {
-              size: 12
-            }
+            font: { size: 12 }
           }
         },
         tooltip: {
@@ -83,7 +83,7 @@ function initChart() {
           time: {
             unit: 'minute',
             displayFormats: {
-              minute: 'HH:mm',
+              minute: 'HH:mm:ss',
               hour: 'HH:mm',
               day: 'MMM D'
             },
@@ -138,28 +138,74 @@ async function fetchData() {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     
-    const { predictedData, seiGasPriceData, metrics } = await response.json();
+    const { predictedData, seiGasPriceData, bufferStats } = await response.json();
 
     // Update chart data
-    chart.data.labels = predictedData.map(d => new Date(d.timestamp));
     chart.data.datasets[0].data = predictedData.map(d => ({
       x: new Date(d.timestamp),
       y: d.confidence99 || null
     }));
+    
     chart.data.datasets[1].data = seiGasPriceData.map(d => ({
       x: new Date(d.timestamp),
       y: d.confidence99 || null
     }));
     
+    // For 1h view, only update if we have new data
+    if (currentRange === '1h' && lastDataTimestamp) {
+      const latestTimestamp = Math.max(
+        ...predictedData.map(d => new Date(d.timestamp).getTime()),
+        ...seiGasPriceData.map(d => new Date(d.timestamp).getTime())
+      );
+      
+      if (latestTimestamp <= lastDataTimestamp) {
+        return;
+      }
+    }
+    
+    // Store latest timestamp
+    lastDataTimestamp = Math.max(
+      ...predictedData.map(d => new Date(d.timestamp).getTime()),
+      ...seiGasPriceData.map(d => new Date(d.timestamp).getTime())
+    );
+
     // Update chart scales based on timeframe
     updateChartScales(currentRange);
     
-    chart.update('none');
-    updateMetricsDisplay(metrics);
+    // Use requestAnimationFrame for smoother updates
+    requestAnimationFrame(() => {
+      chart.update('none'); // Update without animation for better performance
+    });
+
+    // Update buffer stats if available
+    if (bufferStats) {
+      updateBufferStats(bufferStats);
+    }
   } catch (error) {
     console.error('Error fetching chart data:', error);
-    // Optionally show error to user
-    updateErrorDisplay(error);
+    showError(error.message);
+  }
+}
+
+function updateBufferStats(stats) {
+  if (!stats) return;
+  
+  const statsContainer = document.getElementById('bufferStats');
+  if (statsContainer) {
+    statsContainer.innerHTML = `
+      <div class="buffer-stat">
+        <span>Buffer Size:</span>
+        <span>${stats.bufferSize}</span>
+      </div>
+      <div class="buffer-stat">
+        <span>Write Buffer:</span>
+        <span>${stats.writeBufferSize}</span>
+      </div>
+      <div class="buffer-stat">
+        <span>Block Range:</span>
+        <span>${stats.oldestBlock} - ${stats.newestBlock}</span>
+      </div>
+    `;
   }
 }
 
@@ -173,8 +219,8 @@ function updateChartScales(range) {
     '7d': 'day'
   }[range] || 'hour';
 
-  const tickCount = {
-    '1h': 6,
+  const ticksLimit = {
+    '1h': 12,
     '6h': 6,
     '12h': 12,
     '24h': 8,
@@ -183,7 +229,32 @@ function updateChartScales(range) {
   }[range] || 8;
 
   chart.options.scales.x.time.unit = timeUnit;
-  chart.options.scales.x.ticks.maxTicksLimit = tickCount;
+  chart.options.scales.x.ticks.maxTicksLimit = ticksLimit;
+
+  // Adjust time display format based on range
+  if (range === '1h') {
+    chart.options.scales.x.time.displayFormats.minute = 'HH:mm:ss';
+  } else {
+    chart.options.scales.x.time.displayFormats.minute = 'HH:mm';
+  }
+}
+
+function showError(message) {
+  const errorBanner = document.getElementById('errorBanner') || createErrorBanner();
+  errorBanner.textContent = `Error: ${message}`;
+  errorBanner.style.opacity = '1';
+  
+  setTimeout(() => {
+    errorBanner.style.opacity = '0';
+  }, 5000);
+}
+
+function createErrorBanner() {
+  const banner = document.createElement('div');
+  banner.id = 'errorBanner';
+  banner.className = 'error-banner';
+  document.body.appendChild(banner);
+  return banner;
 }
 
 function setUpdateInterval(range) {
@@ -195,36 +266,6 @@ function setUpdateInterval(range) {
   if (interval) {
     updateInterval = setInterval(fetchData, interval);
   }
-}
-
-function updateErrorDisplay(error) {
-  const errorBanner = document.getElementById('errorBanner') || createErrorBanner();
-  errorBanner.textContent = `Error: ${error.message}`;
-  errorBanner.style.opacity = '1';
-  
-  // Hide after 5 seconds
-  setTimeout(() => {
-    errorBanner.style.opacity = '0';
-  }, 5000);
-}
-
-function createErrorBanner() {
-  const banner = document.createElement('div');
-  banner.id = 'errorBanner';
-  banner.style.cssText = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    background-color: #f44336;
-    color: white;
-    padding: 15px;
-    border-radius: 4px;
-    transition: opacity 0.3s;
-    opacity: 0;
-    z-index: 1000;
-  `;
-  document.body.appendChild(banner);
-  return banner;
 }
 
 function setupEventListeners() {
@@ -241,6 +282,7 @@ function setupEventListeners() {
       document.querySelectorAll('.controls button').forEach(b => b.classList.remove('active'));
       button.classList.add('active');
       currentRange = range;
+      lastDataTimestamp = null; // Reset timestamp on range change
       setUpdateInterval(range);
       fetchData();
     });
@@ -248,12 +290,14 @@ function setupEventListeners() {
     container.appendChild(button);
   });
 
-  document.getElementById('pauseUpdates').addEventListener('click', function() {
+  const pauseButton = document.getElementById('pauseUpdates');
+  pauseButton.addEventListener('click', function() {
     isPaused = !isPaused;
     this.textContent = isPaused ? 'Resume Updates' : 'Pause Updates';
     this.classList.toggle('active', isPaused);
     if (!isPaused) {
-      fetchData(); // Immediate update when resuming
+      lastDataTimestamp = null; // Reset timestamp when resuming
+      fetchData();
     }
   });
 }
