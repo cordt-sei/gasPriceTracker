@@ -14,14 +14,21 @@
   <link rel="icon" sizes="192x192" href="/assets/icons/android-chrome-192x192.png">
   <link rel="icon" sizes="512x512" href="/assets/icons/android-chrome-512x512.png">
   
-  <!-- Preload critical resources -->
-  <link rel="preload" href="https://cdn.jsdelivr.net/npm/chart.js" as="script">
-  <link rel="preload" href="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns" as="script">
-  <link rel="preload" href="styles.css" as="style">
-  <link rel="preload" href="chart.js" as="script">
-  
   <!-- Stylesheets -->
   <link rel="stylesheet" href="styles.css">
+
+  <!-- Import map for ES modules -->
+  <script type="importmap">
+  {
+    "imports": {
+      "chart.js": "https://cdn.jsdelivr.net/npm/chart.js/+esm",
+      "chartjs-adapter-date-fns": "https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/+esm"
+    }
+  }
+  </script>
+  
+  <!-- Load your module script -->
+  <script type="module" src="chart.js"></script>
 </head>
 <body>
   <div class="container">
