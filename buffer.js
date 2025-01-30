@@ -13,9 +13,37 @@ class BlockBuffer {
       ...options
     };
 
+    // Initialize database schema
+    this.initializeDatabase();
+
     // Initialize buffer cleanup interval
     setInterval(() => this.cleanBuffer(), this.options.bufferTimeWindow);
     setInterval(() => this.flushToDatabase(), this.options.writeInterval);
+  }
+
+  initializeDatabase() {
+    console.log('Initializing database schema...');
+    this.db.exec(`
+      DROP TABLE IF EXISTS gas_prices;
+      
+      CREATE TABLE gas_prices (
+        blockNumber INTEGER PRIMARY KEY,
+        timestamp TEXT NOT NULL,
+        baseFeePerGas REAL,
+        confidence50 REAL,
+        confidence70 REAL,
+        confidence90 REAL,
+        confidence99 REAL,
+        seiGasPrice REAL
+      );
+      
+      CREATE INDEX IF NOT EXISTS idx_timestamp ON gas_prices(timestamp);
+      CREATE INDEX IF NOT EXISTS idx_block_height ON gas_prices(blockNumber);
+    `);
+
+    // Log the schema for verification
+    const tableInfo = this.db.prepare('PRAGMA table_info(gas_prices)').all();
+    console.log('Table schema:', tableInfo);
   }
 
   addBlock(blockData) {
@@ -25,7 +53,6 @@ class BlockBuffer {
       timestamp: blockData.timestamp || new Date().toISOString(),
       addedAt: Date.now()
     });
-
     // Add to write buffer
     this.writeBuffer.set(blockNumber, blockData);
   }
@@ -48,7 +75,6 @@ class BlockBuffer {
 
   async flushToDatabase() {
     if (this.writeBuffer.size === 0) return;
-
     const batchInsert = this.db.prepare(`
       INSERT OR REPLACE INTO gas_prices (
         blockNumber, timestamp, baseFeePerGas,
