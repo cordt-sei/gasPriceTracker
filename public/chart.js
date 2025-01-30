@@ -1,4 +1,26 @@
 // chart.js
+import {
+  Chart,
+  LineController,
+  LineElement,
+  PointElement,
+  LinearScale,
+  TimeScale,
+  Legend,
+  Tooltip
+} from 'chart.js';
+import 'chartjs-adapter-date-fns';
+
+Chart.register(
+  LineController,
+  LineElement,
+  PointElement,
+  LinearScale,
+  TimeScale,
+  Legend,
+  Tooltip
+);
+
 let chart;
 let updateInterval;
 let currentRange = '1h';
