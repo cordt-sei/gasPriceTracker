@@ -12,15 +12,19 @@ let lastDataTimestamp = null;
 
 const updateIntervals = {
   '1h': 1000,    // 1s
-  '6h': 5000,
-  '12h': 10000,
-  '24h': 30000,
-  '72h': 60000,
-  '7d': 300000
+  '6h': 5000,    // 5s
+  '12h': 10000,  // 10s
+  '24h': 30000,  // 30s
+  '72h': 60000,  // 1m
+  '7d': 300000   // 5m
 };
 
 function initChart() {
   const ctx = document.getElementById('gasPriceChart').getContext('2d');
+  
+  // Configure date-fns adapter with English locale
+  Chart.defaults.locale = 'en-US';
+
   chart = new Chart(ctx, {
     type: 'line',
     data: {
@@ -85,6 +89,11 @@ function initChart() {
       scales: {
         x: {
           type: 'time',
+          adapters: {
+            date: {
+              locale: 'en-US'
+            }
+          },
           time: {
             unit: 'minute',
             displayFormats: {
@@ -92,7 +101,7 @@ function initChart() {
               hour: 'HH:mm',
               day: 'MMM D'
             },
-            tooltipFormat: 'MMM D, HH:mm:ss'
+            tooltipFormat: 'MMM d, yyyy HH:mm:ss'
           },
           grid: {
             color: 'rgba(255, 255, 255, 0.1)'
@@ -102,11 +111,6 @@ function initChart() {
             maxRotation: 0,
             autoSkip: true,
             maxTicksLimit: 8
-          },
-          adapters: {
-            date: {
-              locale: 'en'
-            }
           }
         },
         y: {
