@@ -20,12 +20,11 @@ const updateIntervals = {
   '7d': 300000   // 5m
 };
 
-async function initChart() {
+function initChart() {
   const ctx = document.getElementById('gasPriceChart').getContext('2d');
   
   try {
-    // Use the globally available locale
-    Chart.defaults.locale = window.dateFnsLocale;
+    Chart.defaults.locale = 'en-US';
     
     chart = new Chart(ctx, {
       type: 'line',

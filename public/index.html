@@ -17,16 +17,10 @@
   <!-- Stylesheets -->
   <link rel="stylesheet" href="/styles.css">
 
-  <!-- Update Chart.js and dependencies to use ES modules -->
-  <script type="module">
-    import Chart from 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.esm.js';
-    import { enUS } from 'https://cdn.jsdelivr.net/npm/date-fns@2.30.0/esm/locale/index.js';
-    import 'https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.esm.js';
-    
-    // Make these available globally
-    window.Chart = Chart;
-    window.dateFnsLocale = enUS;
-  </script>
+  <!-- Load Chart.js directly first -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/date-fns@2.30.0/index.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 </head>
 <body>
   <div class="container">
@@ -76,7 +70,6 @@
     </div>
   </div>
 
-  <!-- Load main script with type="module" -->
-  <script type="module" src="/chart.js"></script>
+  <script src="/chart.js"></script>
 </body>
 </html>
