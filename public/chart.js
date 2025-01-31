@@ -24,9 +24,8 @@ async function initChart() {
   const ctx = document.getElementById('gasPriceChart').getContext('2d');
   
   try {
-    // Import locale and create chart
-    const locale = await import('date-fns/locale/en-US/index.js');
-    chart.defaults.locale = locale;
+    // Use the globally available locale
+    Chart.defaults.locale = window.dateFnsLocale;
     
     chart = new Chart(ctx, {
       type: 'line',
@@ -125,7 +124,6 @@ async function initChart() {
       }
     });
     
-    isInitialized = true;
     return chart;
   } catch (error) {
     console.error('Failed to initialize chart:', error);

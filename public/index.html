@@ -20,8 +20,12 @@
   <!-- Update Chart.js and dependencies to use ES modules -->
   <script type="module">
     import Chart from 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.esm.js';
+    import { enUS } from 'https://cdn.jsdelivr.net/npm/date-fns@2.30.0/esm/locale/index.js';
     import 'https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.esm.js';
+    
+    // Make these available globally
     window.Chart = Chart;
+    window.dateFnsLocale = enUS;
   </script>
 </head>
 <body>

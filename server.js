@@ -11,11 +11,10 @@ app.use((req, res, next) => {
   res.setHeader(
     'Content-Security-Policy',
     "default-src 'self'; " +
-    "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; " +
+    "script-src 'self' https://cdn.jsdelivr.net https://esm.sh 'unsafe-inline'; " +
     "style-src 'self' 'unsafe-inline'; " +
     "img-src 'self' data:; " +
-    "connect-src 'self';" +
-    "script-src-elem 'self' https://cdn.jsdelivr.net 'unsafe-inline';"
+    "connect-src 'self' https://cdn.jsdelivr.net https://esm.sh;"
   );
   next();
 });
