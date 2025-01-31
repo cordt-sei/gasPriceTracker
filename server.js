@@ -8,12 +8,15 @@ import BlockBuffer from './buffer.js';
 const app = express();
 const PORT = process.env.PORT || 3303;
 
-// Additional security headers (complementing Caddy's headers)
 app.use((req, res, next) => {
-  // Add CSP header
   res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'"
+    "default-src 'self'; " +
+    "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; " +
+    "style-src 'self' 'unsafe-inline'; " +
+    "img-src 'self' data:; " +
+    "connect-src 'self';" +
+    "script-src-elem 'self' https://cdn.jsdelivr.net 'unsafe-inline';"
   );
   next();
 });

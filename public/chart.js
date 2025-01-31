@@ -1,7 +1,3 @@
-import { Chart } from 'chart.js';
-import { enUS } from 'date-fns/locale';
-import 'chartjs-adapter-date-fns';
-
 // Global error monitoring
 window.addEventListener('error', (event) => {
   console.error('Script error:', event.error);
@@ -26,8 +22,7 @@ const updateIntervals = {
 function initChart() {
   const ctx = document.getElementById('gasPriceChart').getContext('2d');
   
-  // Configure date adapter with locale
-  Chart.defaults.locale = enUS;
+  Chart.defaults.locale = 'en-US';
 
   chart = new Chart(ctx, {
     type: 'line',
@@ -93,6 +88,11 @@ function initChart() {
       scales: {
         x: {
           type: 'time',
+          adapters: {
+            date: {
+              locale: 'en-US'
+            }
+          },
           time: {
             unit: 'minute',
             displayFormats: {
@@ -110,11 +110,6 @@ function initChart() {
             maxRotation: 0,
             autoSkip: true,
             maxTicksLimit: 8
-          },
-          adapters: {
-            date: {
-              locale: enUS
-            }
           }
         },
         y: {
@@ -293,7 +288,7 @@ function setupEventListeners() {
     
     button.addEventListener('click', () => {
       document.querySelectorAll('.controls button').forEach(b => b.classList.remove('active'));
-      button.classList.add('active');
+		button.classList.add('active');
       currentRange = range;
       lastDataTimestamp = null; // Reset timestamp on range change
       setUpdateInterval(range);
@@ -307,7 +302,7 @@ function setupEventListeners() {
   pauseButton.addEventListener('click', function() {
     isPaused = !isPaused;
     this.textContent = isPaused ? 'Resume Updates' : 'Pause Updates';
-		this.classList.toggle('active', isPaused);
+    this.classList.toggle('active', isPaused);
     if (!isPaused) {
       lastDataTimestamp = null; // Reset timestamp when resuming
       fetchData();
