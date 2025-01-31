@@ -118,4 +118,4 @@ class BlockBuffer {
   }
 }
 
-export default BlockBuffer;
+export default blockBuffer;

@@ -3,7 +3,7 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { BlockBuffer } from 'buffer';
+import { blockBuffer } from 'buffer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,15 +32,6 @@ app.use((req, res, next) => {
   );
   next();
 });
-
-// Initialize block buffer with error handling
-let blockBuffer;
-try {
-  blockBuffer = new BlockBuffer('gas_prices.db');
-} catch (error) {
-  console.error('Failed to initialize block buffer:', error);
-  process.exit(1);
-}
 
 // API endpoints with environment variables and fallbacks
 const SEI_RPC_API = process.env.SEI_RPC_API || 'https://rpc.sei.basementnodes.ca/status';
