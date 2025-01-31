@@ -2,7 +2,6 @@
 
 import express from 'express';
 import axios from 'axios';
-import rateLimit from 'express-rate-limit';
 import BlockBuffer from './buffer.js';
 
 const app = express();
@@ -20,27 +19,6 @@ app.use((req, res, next) => {
   );
   next();
 });
-
-// Rate limiting for API endpoints
-const apiLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: 30, // 30 requests per minute per IP
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: (req, res) => {
-    res.status(429).json({
-      error: 'Too many requests, please try again later'
-    });
-  },
-  skip: (req) => {
-    // Skip rate limiting for local/internal requests
-    const ip = req.ip || req.connection.remoteAddress;
-    return ip === '127.0.0.1' || ip.startsWith('10.') || ip.startsWith('172.16.') || ip.startsWith('192.168.');
-  }
-});
-
-// Apply rate limiting only to API routes
-app.use('/api/', apiLimiter);
 
 // Initialize block buffer with error handling
 let blockBuffer;

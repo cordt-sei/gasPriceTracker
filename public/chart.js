@@ -9,6 +9,7 @@ let updateInterval;
 let currentRange = '1h';
 let isPaused = false;
 let lastDataTimestamp = null;
+let isInitialized = false;
 
 const updateIntervals = {
   '1h': 1000,    // 1s
@@ -19,12 +20,13 @@ const updateIntervals = {
   '7d': 300000   // 5m
 };
 
-function initChart() {
+async function initChart() {
   const ctx = document.getElementById('gasPriceChart').getContext('2d');
   
-  // Import the required date-fns locale
-  import('date-fns/locale/en-US/index.js').then(locale => {
-    Chart.defaults.locale = locale;
+  try {
+    // Import locale and create chart
+    const locale = await import('date-fns/locale/en-US/index.js');
+    chart.defaults.locale = locale;
     
     chart = new Chart(ctx, {
       type: 'line',
@@ -122,10 +124,14 @@ function initChart() {
         }
       }
     });
-  }).catch(error => {
-    console.error('Failed to load locale:', error);
-    showError('Failed to initialize chart locale');
-  });
+    
+    isInitialized = true;
+    return chart;
+  } catch (error) {
+    console.error('Failed to initialize chart:', error);
+    showError('Failed to initialize chart. Please refresh the page.');
+    throw error;
+  }
 }
 
 function updateMetricsDisplay(metrics) {
