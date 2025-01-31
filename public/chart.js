@@ -20,11 +20,11 @@ const updateIntervals = {
   '7d': 300000   // 5m
 };
 
-function initChart() {
+export async function initChart() {
   const ctx = document.getElementById('gasPriceChart').getContext('2d');
   
   try {
-    Chart.defaults.locale = 'en-US';
+    chart.defaults.locale = 'en-US';
     
     chart = new Chart(ctx, {
       type: 'line',

@@ -6,7 +6,9 @@
   "license": "MIT",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "build": "webpack --config webpack.config.mjs",
+    "clean": "rm -rf node_modules dist"
   },
   "dependencies": {
     "axios": "^1.7.9",
@@ -15,6 +17,8 @@
     "express": "^4.21.2"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "nodemon": "^3.0.1",
+    "webpack": "^5.97.1",
+    "webpack-cli": "^6.0.1"
   }
 }
