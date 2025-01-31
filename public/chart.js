@@ -1,26 +1,9 @@
-// chart.js
-import {
-  Chart,
-  LineController,
-  LineElement,
-  PointElement,
-  LinearScale,
-  TimeScale,
-  Legend,
-  Tooltip
-} from 'chart.js';
-import 'chartjs-adapter-date-fns';
+// Global error monitoring
+window.addEventListener('error', (event) => {
+  console.error('Script error:', event.error);
+});
 
-Chart.register(
-  LineController,
-  LineElement,
-  PointElement,
-  LinearScale,
-  TimeScale,
-  Legend,
-  Tooltip
-);
-
+// Chart initialization and state management
 let chart;
 let updateInterval;
 let currentRange = '1h';
@@ -326,10 +309,15 @@ function setupEventListeners() {
 
 // Initialize everything when the page loads
 window.addEventListener('load', () => {
-  initChart();
-  setupEventListeners();
-  setUpdateInterval('1h');
-  fetchData();
+  try {
+    initChart();
+    setupEventListeners();
+    setUpdateInterval('1h');
+    fetchData();
+  } catch (error) {
+    console.error('Initialization error:', error);
+    showError('Failed to initialize application');
+  }
 });
 
 // Cleanup on page unload

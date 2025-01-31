@@ -17,17 +17,10 @@
   <!-- Stylesheets -->
   <link rel="stylesheet" href="/styles.css">
 
-  <!-- Import map for ES modules -->
-  <script type="importmap">
-  {
-    "imports": {
-      "chart.js": "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.esm.js",
-      "@kurkle/color": "https://cdn.jsdelivr.net/npm/@kurkle/color@0.3.2/+esm",
-      "date-fns": "https://cdn.jsdelivr.net/npm/date-fns@2.30.0/esm/index.js",
-      "chartjs-adapter-date-fns": "https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.esm.js"
-    }
-  }
-  </script>
+  <!-- Load Chart.js and dependencies directly -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/date-fns@2.30.0/index.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 </head>
 <body>
   <div class="container">
@@ -77,7 +70,7 @@
     </div>
   </div>
 
-  <!-- Load module script -->
+  <!-- Load main script as module -->
   <script type="module" src="/chart.js"></script>
 </body>
 </html>
