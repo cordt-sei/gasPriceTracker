@@ -22,108 +22,109 @@ const updateIntervals = {
 function initChart() {
   const ctx = document.getElementById('gasPriceChart').getContext('2d');
   
-  Chart.defaults.locale = 'en-US';
-
-  chart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: [],
-      datasets: [{
-        label: 'Predicted Gas Price',
-        data: [],
-        borderColor: '#4caf50',
-        backgroundColor: 'rgba(76, 175, 80, 0.1)',
-        borderWidth: 1.5,
-        pointRadius: 0,
-        fill: false,
-        tension: 0.4
-      }, {
-        label: 'Sei Gas Price',
-        data: [],
-        borderColor: '#e91e63',
-        backgroundColor: 'rgba(233, 30, 99, 0.1)',
-        borderWidth: 1.5,
-        pointRadius: 0,
-        fill: false,
-        tension: 0.4
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: { 
-        duration: 300,
-        easing: 'easeInOutQuad'
+  // Import the required date-fns locale
+  import('date-fns/locale/en-US/index.js').then(locale => {
+    Chart.defaults.locale = locale;
+    
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        datasets: [{
+          label: 'Predicted Gas Price',
+          data: [],
+          borderColor: '#4caf50',
+          backgroundColor: 'rgba(76, 175, 80, 0.1)',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          fill: false,
+          tension: 0.4
+        }, {
+          label: 'Sei Gas Price',
+          data: [],
+          borderColor: '#e91e63',
+          backgroundColor: 'rgba(233, 30, 99, 0.1)',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          fill: false,
+          tension: 0.4
+        }]
       },
-      interaction: {
-        intersect: false,
-        mode: 'nearest',
-        axis: 'x'
-      },
-      plugins: {
-        legend: {
-          position: 'top',
-          labels: { 
-            color: '#d4d4d4',
-            font: { size: 12 }
-          }
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { 
+          duration: 300,
+          easing: 'easeInOutQuad'
         },
-        tooltip: {
-          mode: 'index',
+        interaction: {
           intersect: false,
-          backgroundColor: 'rgba(45, 45, 45, 0.9)',
-          titleColor: '#fff',
-          bodyColor: '#fff',
-          borderColor: 'rgba(255, 255, 255, 0.2)',
-          borderWidth: 1,
-          padding: 10,
-          callbacks: {
-            label: (context) => {
-              const value = context.raw || 0;
-              return `${context.dataset.label}: ${value.toFixed(2)} Gwei`;
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          type: 'time',
-          adapters: {
-            date: {
-              locale: 'en-US'
+          mode: 'nearest',
+          axis: 'x'
+        },
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: { 
+              color: '#d4d4d4',
+              font: { size: 12 }
             }
           },
-          time: {
-            unit: 'minute',
-            displayFormats: {
-              minute: 'HH:mm:ss',
-              hour: 'HH:mm',
-              day: 'MMM d'
-            },
-            tooltipFormat: 'MMM d, yyyy HH:mm:ss'
-          },
-          grid: {
-            color: 'rgba(255, 255, 255, 0.1)'
-          },
-          ticks: { 
-            color: '#d4d4d4',
-            maxRotation: 0,
-            autoSkip: true,
-            maxTicksLimit: 8
+          tooltip: {
+            mode: 'index',
+            intersect: false,
+            backgroundColor: 'rgba(45, 45, 45, 0.9)',
+            titleColor: '#fff',
+            bodyColor: '#fff',
+            borderColor: 'rgba(255, 255, 255, 0.2)',
+            borderWidth: 1,
+            padding: 10,
+            callbacks: {
+              label: (context) => {
+                const value = context.raw || 0;
+                return `${context.dataset.label}: ${value.toFixed(2)} Gwei`;
+              }
+            }
           }
         },
-        y: {
-          beginAtZero: true,
-          grid: {
-            color: 'rgba(255, 255, 255, 0.1)'
+        scales: {
+          x: {
+            type: 'time',
+            time: {
+              parser: 'yyyy-MM-dd\'T\'HH:mm:ss.SSSX',
+              unit: 'minute',
+              displayFormats: {
+                minute: 'HH:mm:ss',
+                hour: 'HH:mm',
+                day: 'MMM d'
+              },
+              tooltipFormat: 'MMM d, yyyy HH:mm:ss'
+            },
+            grid: {
+              color: 'rgba(255, 255, 255, 0.1)'
+            },
+            ticks: { 
+              color: '#d4d4d4',
+              maxRotation: 0,
+              autoSkip: true,
+              maxTicksLimit: 8
+            }
           },
-          ticks: {
-            color: '#d4d4d4',
-            callback: value => `${value.toFixed(1)} Gwei`
+          y: {
+            beginAtZero: true,
+            grid: {
+              color: 'rgba(255, 255, 255, 0.1)'
+            },
+            ticks: {
+              color: '#d4d4d4',
+              callback: value => `${value.toFixed(1)} Gwei`
+            }
           }
         }
       }
-    }
+    });
+  }).catch(error => {
+    console.error('Failed to load locale:', error);
+    showError('Failed to initialize chart locale');
   });
 }
 
@@ -311,15 +312,15 @@ function setupEventListeners() {
 }
 
 // Initialize everything when the page loads
-window.addEventListener('load', () => {
+window.addEventListener('load', async () => {
   try {
-    initChart();
+    await initChart();
     setupEventListeners();
     setUpdateInterval('1h');
     fetchData();
   } catch (error) {
     console.error('Initialization error:', error);
-    showError('Failed to initialize application');
+    showError('Failed to initialize application. Please refresh the page.');
   }
 });
 

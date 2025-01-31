@@ -182,6 +182,16 @@ button.active {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   z-index: 1000;
   transition: opacity 0.3s ease;
+  max-width: 80%;
+  word-wrap: break-word;
+}
+
+.error-banner.show {
+  opacity: 1;
+}
+
+.error-banner.hide {
+  opacity: 0;
 }
 
 /* Performance optimizations */
