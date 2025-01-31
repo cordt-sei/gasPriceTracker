@@ -1,17 +1,30 @@
 // server.js
 
 import express from 'express';
-import axios from 'axios';
-import BlockBuffer from './buffer.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3303;
+
+app.use(express.static(__dirname));
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
 
 app.use((req, res, next) => {
   res.setHeader(
     'Content-Security-Policy',
     "default-src 'self'; " +
-    "script-src 'self' https://cdn.jsdelivr.net; " +  // Removed unsafe-inline
+    "script-src 'self' https://cdn.jsdelivr.net; " + 
     "style-src 'self' 'unsafe-inline'; " +
     "img-src 'self' data:; " +
     "connect-src 'self';"
@@ -35,7 +48,7 @@ const EVM_RPC_API = process.env.EVM_RPC_API || 'https://evm-rpc.sei.basementnode
 const CHAIN_ID = parseInt(process.env.CHAIN_ID || '1329', 10);
 
 // Serve static files with proper caching
-app.use(express.static('public', {
+app.use(express.static('dist', {
   maxAge: '1h',
   setHeaders: (res, path) => {
     if (path.endsWith('.html')) {
