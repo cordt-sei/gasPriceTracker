@@ -3,7 +3,7 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { blockBuffer } from 'buffer';
+import { BlockBuffer } from 'buffer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
