@@ -1,20 +1,44 @@
-# Node modules and package lock
+# Dependencies
 node_modules/
-yarn.lock
+
+# Runtime data
+*.pid
+*.seed
+*.pid.lock
+
+# Databases
+*.db
+*.db-journal
 
 # Logs
+logs
 *.log
-logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
 # Environment variables
 .env
-nodemon.json
-# SQLite database
-*.db
-*.db_journal
+.env.local
+.env.*.local
 
-# MacOS system files
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
 .DS_Store
+
+# Build output
+dist/
+build/
+
+# Temporary files
+tmp/
+temp/
+
+# System files
+.DS_Store
+Thumbs.db
+nodemon.json
+yarn.lock

@@ -1,30 +1,58 @@
+// server.js
+
 import express from 'express';
 import axios from 'axios';
+import rateLimit from 'express-rate-limit';
 import BlockBuffer from './buffer.js';
 
 const app = express();
-const PORT = 3303;
+const PORT = process.env.PORT || 3303;
+
+// Rate limiting for API endpoints only
+const apiLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 30, // 30 requests per minute per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    res.status(429).json({
+      error: 'Too many requests, please try again later'
+    });
+  }
+});
+
+// Apply rate limiting only to API routes
+app.use('/api/', apiLimiter);
 
 // Initialize block buffer
 const blockBuffer = new BlockBuffer('gas_prices.db');
 
 // API endpoints
-const SEI_RPC_API = 'https://rpc.sei.basementnodes.ca/status';
-const PREDICTED_GAS_API = 'https://api.blocknative.com/gasprices/blockprices';
-const EVM_RPC_API = 'https://evm-rpc.sei.basementnodes.ca';
-const CHAIN_ID = 1329;
+const SEI_RPC_API = process.env.SEI_RPC_API || 'https://rpc.sei.basementnodes.ca/status';
+const PREDICTED_GAS_API = process.env.PREDICTED_GAS_API || 'https://api.blocknative.com/gasprices/blockprices';
+const EVM_RPC_API = process.env.EVM_RPC_API || 'https://evm-rpc.sei.basementnodes.ca';
+const CHAIN_ID = process.env.CHAIN_ID || 1329;
+
+// Serve static files
+app.use(express.static('public'));
 
 // Enhanced error handling for API calls
 const fetchWithRetry = async (url, options = {}, retries = 3) => {
+  let lastError;
   for (let i = 0; i < retries; i++) {
     try {
-      const response = await axios(url, options);
+      const response = await axios(url, {
+        timeout: 5000,
+        ...options
+      });
       return response;
     } catch (error) {
-      if (i === retries - 1) throw error;
+      lastError = error;
+      if (i === retries - 1) break;
       await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i)));
     }
   }
+  throw lastError;
 };
 
 async function pollPredictedGasPrice() {
@@ -110,9 +138,8 @@ app.get('/api/chart-data', async (req, res) => {
       '7d': 7 * 24 * 60 * 60 * 1000
     };
 
-    // For 1h range, combine buffer data with recent DB data
     if (range === '1h') {
-      const recentBlocks = blockBuffer.getRecentBlocks(15000); // Last 15 seconds from buffer
+      const recentBlocks = blockBuffer.getRecentBlocks(15000);
       const timeFilter = new Date(Date.now() - timeRanges[range]).toISOString();
       
       const dbData = blockBuffer.db.prepare(`
@@ -138,7 +165,6 @@ app.get('/api/chart-data', async (req, res) => {
         bufferStats: blockBuffer.getBufferStats()
       });
     } else {
-      // For other ranges, use pure DB data
       const timeFilter = new Date(Date.now() - timeRanges[range]).toISOString();
       const rows = blockBuffer.db.prepare(`
         SELECT blockNumber, timestamp, confidence99, seiGasPrice 
@@ -162,7 +188,7 @@ app.get('/api/chart-data', async (req, res) => {
     }
   } catch (error) {
     console.error('Chart data error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -174,6 +200,12 @@ const POLL_INTERVAL = {
 
 setInterval(pollPredictedGasPrice, POLL_INTERVAL.PREDICTED);
 setInterval(pollSeiGasPrice, POLL_INTERVAL.SEI);
+
+// Simple error handler that doesn't expose internal details
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ error: 'Internal server error' });
+});
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

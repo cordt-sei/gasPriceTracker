@@ -1,4 +1,5 @@
-// buffer-system.js
+// buffer.js
+
 import Database from 'better-sqlite3';
 
 class BlockBuffer {
@@ -22,11 +23,9 @@ class BlockBuffer {
   }
 
   initializeDatabase() {
-    console.log('Initializing database schema...');
+    console.log('Initializing database...');
     this.db.exec(`
-      DROP TABLE IF EXISTS gas_prices;
-      
-      CREATE TABLE gas_prices (
+      CREATE TABLE IF NOT EXISTS gas_prices (
         blockNumber INTEGER PRIMARY KEY,
         timestamp TEXT NOT NULL,
         baseFeePerGas REAL,
@@ -41,7 +40,6 @@ class BlockBuffer {
       CREATE INDEX IF NOT EXISTS idx_block_height ON gas_prices(blockNumber);
     `);
 
-    // Log the schema for verification
     const tableInfo = this.db.prepare('PRAGMA table_info(gas_prices)').all();
     console.log('Table schema:', tableInfo);
   }
@@ -53,7 +51,6 @@ class BlockBuffer {
       timestamp: blockData.timestamp || new Date().toISOString(),
       addedAt: Date.now()
     });
-    // Add to write buffer
     this.writeBuffer.set(blockNumber, blockData);
   }
 
@@ -75,6 +72,7 @@ class BlockBuffer {
 
   async flushToDatabase() {
     if (this.writeBuffer.size === 0) return;
+    
     const batchInsert = this.db.prepare(`
       INSERT OR REPLACE INTO gas_prices (
         blockNumber, timestamp, baseFeePerGas,
@@ -109,11 +107,12 @@ class BlockBuffer {
   }
 
   getBufferStats() {
+    const blocks = Array.from(this.buffer.keys());
     return {
       bufferSize: this.buffer.size,
       writeBufferSize: this.writeBuffer.size,
-      oldestBlock: Math.min(...this.buffer.keys()),
-      newestBlock: Math.max(...this.buffer.keys()),
+      oldestBlock: blocks.length ? Math.min(...blocks) : 0,
+      newestBlock: blocks.length ? Math.max(...blocks) : 0,
       lastWrite: this.lastWrite
     };
   }
